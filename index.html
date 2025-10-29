@@ -477,7 +477,7 @@
                     const teamDocRef = doc(getTeamCollectionRef(companyId), userId); 
                     transaction.set(teamDocRef, {
                         email: userEmail,
-                        designation: 'HR Manager / Administrator',
+                        designation: 'Team Leader / Administrator',
                         joinedAt: serverTimestamp(),
                         name: userEmail.split('@')[0], // Default name
                         phone: ''
@@ -487,7 +487,7 @@
                     const profileDocRef = doc(db, getProfilePath(userId));
                     transaction.set(profileDocRef, {
                         email: userEmail,
-                        designation: 'HR Manager / Administrator',
+                        designation: 'Team Leader / Administrator',
                         companyId: companyId,
                         createdAt: serverTimestamp(),
                         name: userEmail.split('@')[0], // Default name
@@ -598,7 +598,7 @@
 
         const handleToggleTaskStatus = async (taskId, currentStatus) => {
             // Define roles
-            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
+            const isAdmin = userProfile?.designation === 'Team Leader / Administrator';
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
             
             const task = tasks.find(t => t.id === taskId);
@@ -624,10 +624,10 @@
         };
 
         const handleDeleteTask = async (taskId) => {
-            // FIX 2: Deletion is restricted to the main HR Manager / Administrator only.
-            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
+            // FIX 2: Deletion is restricted to the main Team Leader / Administrator only.
+            const isAdmin = userProfile?.designation === 'Team Leader / Administrator';
             if (!isAdmin) {
-                alert("Permission Denied: Only the main HR Manager / Administrator can delete tasks.");
+                alert("Permission Denied: Only the main Team Leader / Administrator can delete tasks.");
                 return;
             }
 
@@ -651,7 +651,7 @@
             updateState({ loading: true, message: null });
             
             // Permission check for Add Team Member
-            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
+            const isAdmin = userProfile?.designation === 'Team Leader / Administrator';
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
             if (!isAdmin && !isAssistantAdmin) {
                 updateState({ message: 'Permission Denied: Only Administrators can add team members.', loading: false });
@@ -686,10 +686,10 @@
         };
 
         const handleRemoveTeamMember = async (memberId) => {
-            // FIX 2: Removal is restricted to the main HR Manager / Administrator only.
-            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
+            // FIX 2: Removal is restricted to the main Team Leader / Administrator only.
+            const isAdmin = userProfile?.designation === 'Team Leader / Administrator';
             if (!isAdmin) {
-                alert("Permission Denied: Only the main HR Manager / Administrator can remove team members.");
+                alert("Permission Denied: Only the main Team Leader / Administrator can remove team members.");
                 return;
             }
 
@@ -946,7 +946,7 @@
         `;
 
         const renderDashboard = () => {
-            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
+            const isAdmin = userProfile?.designation === 'Team Leader / Administrator';
             // FIX 2: Added Assistant Admin role definition
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
             
@@ -1087,7 +1087,7 @@
                                         <select name="designation" required onchange="updateState({ newTeamMemberForm: { designation: this.value } })" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                                             <option value="">Select Designation</option>
                                             <option value="Team Member">Team Member</option>
-                                            ${isAdmin ? '<option value="HR Manager / Administrator">HR Manager / Administrator</option>' : ''}
+                                            ${isAdmin ? '<option value="Team Leader / Administrator">Team Leader / Administrator</option>' : ''}
                                             <option value="Assistant Administrator">Assistant Administrator</option>
                                         </select>
                                     </div>
@@ -1188,7 +1188,7 @@
         
         // Renders the main task board (horizontal cards)
         const renderTaskList = (list, isCompact = false) => {
-            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
+            const isAdmin = userProfile?.designation === 'Team Leader / Administrator';
             if (list.length === 0) {
                 return `<p class="text-gray-500 italic p-4 bg-gray-50 rounded-lg">No tasks found matching the current filter.</p>`;
             }

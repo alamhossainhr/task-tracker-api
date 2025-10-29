@@ -910,7 +910,7 @@
                     <div class="flex flex-col space-y-2 pl-4 flex-shrink-0 no-print">
                         ${canToggleStatus ? `<button onclick="handleToggleTaskStatus('${task.id}', '${task.status}')" class="py-1 px-3 text-xs rounded-lg ${task.status!=='Completed'?'bg-indigo-500 hover:bg-indigo-600 text-white':'bg-gray-300 hover:bg-gray-400 text-gray-800'}">${task.status==='Completed'?'Mark Pending':'Mark Completed'}</button>`:`<button disabled class="py-1 px-3 text-xs rounded-lg bg-gray-200 text-gray-500 cursor-not-allowed">View Only</button>`}
                         <div class="flex space-x-2">
-                            {/* **** ADDED: Edit Button **** */}
+                            
                             ${canEdit ? `<button onclick="handleEditTask('${task.id}')" class="py-1 px-2 flex-1 bg-blue-100 hover:bg-blue-200 text-blue-600 text-xs rounded-lg" title="Edit"><span data-lucide="edit-3" class="w-4 h-4 mx-auto"></span></button>`:''}
                             ${canDelete ? `<button onclick="handleDeleteTask('${task.id}')" class="py-1 px-2 flex-1 bg-red-100 hover:bg-red-200 text-red-600 text-xs rounded-lg" title="Delete"><span data-lucide="trash-2" class="w-4 h-4 mx-auto"></span></button>`:''}
                         </div>

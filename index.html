@@ -524,7 +524,7 @@
                     const teamDocRef = doc(getTeamCollectionRef(companyId), userId); 
                     transaction.set(teamDocRef, {
                         email: userEmail,
-                        designation: 'HR Manager / Administrator',
+                        designation: 'Team Leader',
                         joinedAt: serverTimestamp(),
                         name: userEmail.split('@')[0], // Default name
                         phone: ''
@@ -534,7 +534,7 @@
                     const profileDocRef = doc(db, getProfilePath(userId));
                     transaction.set(profileDocRef, {
                         email: userEmail,
-                        designation: 'HR Manager / Administrator',
+                        designation: 'Team Leader',
                         companyId: companyId,
                         createdAt: serverTimestamp(),
                         name: userEmail.split('@')[0], // Default name
@@ -610,7 +610,7 @@
             const task = tasks.find(t => t.id === taskId);
             if (!task) return;
 
-            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
+            const isAdmin = userProfile?.designation === 'Team Leader';
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
             
             // FIX 1: Admin and Assistant Admin can edit tasks
@@ -718,7 +718,7 @@
 
         const handleToggleTaskStatus = async (taskId, currentStatus) => {
             // Define roles
-            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
+            const isAdmin = userProfile?.designation === 'Team Leader';
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
             
             const task = tasks.find(t => t.id === taskId);
@@ -750,9 +750,9 @@
 
         const handleDeleteTask = async (taskId) => {
             // Deletion is restricted to the main Team Leader / Administrator only.
-            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
+            const isAdmin = userProfile?.designation === 'Team Leader';
             if (!isAdmin) {
-                alert("Permission Denied: Only the main HR Manager / Administrator can delete tasks.");
+                alert("Permission Denied: Only the main Team Leader can delete tasks.");
                 return;
             }
 
@@ -840,15 +840,24 @@
             `;
             
             const originalContent = document.body.innerHTML;
-            document.body.innerHTML = printContent;
+            document.body.innerHTML = originalContent.replace(/<div id="app"/, `<div id="app" class="no-print"`);
             
-            window.print();
+            // Render the print content temporarily
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write('<html><head><title>TaskFlow Report</title>');
+            printWindow.document.write('<style>@import url(\'https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap\');body{font-family:\'Inter\',sans-serif;}</style>');
+            printWindow.document.write('<style>');
+            printWindow.document.write('@media print {.print-table { width: 100%; border-collapse: collapse; } .print-table th, .print-table td { border: 1px solid #ccc; padding: 8px; text-align: left; } .text-red-600 { color: red !important; } .font-bold { font-weight: bold !important; }}');
+            printWindow.document.write('</style>');
+            printWindow.document.write('</head><body>');
+            printWindow.document.write(printContent);
+            printWindow.document.write('</body></html>');
+            printWindow.document.close();
             
-            setTimeout(() => {
-                document.body.innerHTML = originalContent;
-                render();
-                updateState({ message: 'PDF generated. Check your downloads.', loading: false });
-            }, 500); 
+            printWindow.print();
+            printWindow.close();
+        
+            updateState({ message: 'PDF generated. Check your downloads.', loading: false });
         };
 
         // --- TEAM HANDLERS (Unchanged logic) ---
@@ -859,7 +868,7 @@
             updateState({ loading: true, message: null });
             
             // Permission check for Add Team Member
-            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
+            const isAdmin = userProfile?.designation === 'Team Leader';
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
             if (!isAdmin && !isAssistantAdmin) {
                 updateState({ message: 'Permission Denied: Only Administrators can add team members.', loading: false });
@@ -895,9 +904,9 @@
 
         const handleRemoveTeamMember = async (memberId) => {
             // Removal is restricted to the main Team Leader / Administrator only.
-            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
+            const isAdmin = userProfile?.designation === 'Team Leader';
             if (!isAdmin) {
-                alert("Permission Denied: Only the main HR Manager / Administrator can remove team members.");
+                alert("Permission Denied: Only the main Team Leader can remove team members.");
                 return;
             }
 
@@ -964,7 +973,7 @@
                                      STATE.message ? 'bg-red-100 text-red-800' :
                                      'bg-blue-100 text-blue-800';
                 html += `
-                    <div class="fixed top-0 left-0 right-0 p-3 text-center ${messageClass} z-50 shadow-md transition-all duration-300">
+                    <div class="fixed top-0 left-0 right-0 p-3 text-center ${messageClass} z-50 shadow-md transition-all duration-300 no-print">
                         ${STATE.loading ? '<span class="inline-block animate-spin mr-2" data-lucide="loader"></span> Loading...' : ''}
                         ${STATE.message ? STATE.message : ''}
                     </div>
@@ -1215,7 +1224,7 @@
         `;
 
         const renderDashboard = () => {
-            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
+            const isAdmin = userProfile?.designation === 'Team Leader';
             // FIX 2: Added Assistant Admin role definition
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
             
@@ -1369,7 +1378,7 @@
                                         <select name="designation" required onchange="updateState({ newTeamMemberForm: { designation: this.value } })" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                                             <option value="">Select Designation</option>
                                             <option value="Team Member">Team Member</option>
-                                            ${isAdmin ? '<option value="HR Manager / Administrator">HR Manager / Administrator</option>' : ''}
+                                            ${isAdmin ? '<option value="Team Leader">Team Leader</option>' : ''}
                                             <option value="Assistant Administrator">Assistant Administrator</option>
                                         </select>
                                     </div>
@@ -1470,7 +1479,7 @@
         
         // Renders the main task board (horizontal cards)
         const renderTaskList = (list, isCompact = false) => {
-            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
+            const isAdmin = userProfile?.designation === 'Team Leader';
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
 
             if (list.length === 0) {

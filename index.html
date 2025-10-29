@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HR Team Task Tracker</title>
+    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         /* Custom styles for 'Inter' font and smooth scrolling */
@@ -59,8 +61,10 @@
 <body class="min-h-screen antialiased">
 
     <div id="app" class="p-4 md:p-8">
-        </div>
+        <!-- Main content will be rendered here by JavaScript -->
+    </div>
 
+    <!-- Firebase Imports -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -198,8 +202,7 @@
             let member = teamMembers.find(m => m.id === uid);
 
             if (!member) {
-                // Also check for email if uid is not found (happens with unlinked members)
-                member = teamMembers.find(m => m.email === uid);
+                 member = teamMembers.find(m => m.email === uid);
             }
             
             if (field === 'designation') {
@@ -474,7 +477,7 @@
                     const teamDocRef = doc(getTeamCollectionRef(companyId), userId); 
                     transaction.set(teamDocRef, {
                         email: userEmail,
-                        designation: 'Team Leader / Administrator',
+                        designation: 'HR Manager / Administrator',
                         joinedAt: serverTimestamp(),
                         name: userEmail.split('@')[0], // Default name
                         phone: ''
@@ -484,7 +487,7 @@
                     const profileDocRef = doc(db, getProfilePath(userId));
                     transaction.set(profileDocRef, {
                         email: userEmail,
-                        designation: 'Team Leader / Administrator',
+                        designation: 'HR Manager / Administrator',
                         companyId: companyId,
                         createdAt: serverTimestamp(),
                         name: userEmail.split('@')[0], // Default name
@@ -595,7 +598,7 @@
 
         const handleToggleTaskStatus = async (taskId, currentStatus) => {
             // Define roles
-            const isAdmin = userProfile?.designation === 'Team Leader / Administrator';
+            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
             
             const task = tasks.find(t => t.id === taskId);
@@ -621,10 +624,10 @@
         };
 
         const handleDeleteTask = async (taskId) => {
-            // FIX 2: Deletion is restricted to the main Team Leader / Administrator only.
-            const isAdmin = userProfile?.designation === 'Team Leader / Administrator';
+            // FIX 2: Deletion is restricted to the main HR Manager / Administrator only.
+            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
             if (!isAdmin) {
-                alert("Permission Denied: Only the main Team Leader / Administrator can delete tasks.");
+                alert("Permission Denied: Only the main HR Manager / Administrator can delete tasks.");
                 return;
             }
 
@@ -648,7 +651,7 @@
             updateState({ loading: true, message: null });
             
             // Permission check for Add Team Member
-            const isAdmin = userProfile?.designation === 'Team Leader / Administrator';
+            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
             if (!isAdmin && !isAssistantAdmin) {
                 updateState({ message: 'Permission Denied: Only Administrators can add team members.', loading: false });
@@ -683,10 +686,10 @@
         };
 
         const handleRemoveTeamMember = async (memberId) => {
-            // FIX 2: Removal is restricted to the main Team Leader / Administrator only.
-            const isAdmin = userProfile?.designation === 'Team Leader / Administrator';
+            // FIX 2: Removal is restricted to the main HR Manager / Administrator only.
+            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
             if (!isAdmin) {
-                alert("Permission Denied: Only the main Team Leader / Administrator can remove team members.");
+                alert("Permission Denied: Only the main HR Manager / Administrator can remove team members.");
                 return;
             }
 
@@ -799,12 +802,14 @@
                     ${STATE.profileMessage ? `<div class="p-3 mb-4 text-sm rounded-lg ${STATE.profileMessage.includes('success') ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}">${STATE.profileMessage}</div>` : ''}
 
                     <div class="space-y-6 scrollable-card p-2">
+                        <!-- Current Details -->
                         <div class="bg-gray-50 p-4 rounded-lg">
                             <p class="font-medium text-lg text-indigo-600">${userEmail}</p>
                             <p class="text-sm text-gray-500">${userProfile?.designation || 'Team Member'}</p>
                             <p class="text-sm text-gray-700 mt-1">Name: ${userProfile?.name || 'Not Set'}</p>
                         </div>
                         
+                        <!-- Section 1: Name and Phone -->
                         <div>
                             <h3 class="text-lg font-semibold text-gray-700 mb-3">Update Contact Details</h3>
                             <div class="space-y-3">
@@ -822,6 +827,7 @@
 
                         <hr class="border-gray-200">
 
+                        <!-- Section 2: Update Email -->
                         <form onsubmit="handleEmailUpdate(event)" id="email-update-form" class="space-y-3">
                             <h3 class="text-lg font-semibold text-gray-700 mb-3">Change Email Address</h3>
                             <div>
@@ -837,6 +843,7 @@
 
                         <hr class="border-gray-200">
 
+                        <!-- Section 3: Update Password -->
                         <form onsubmit="handlePasswordUpdate(event)" id="password-update-form" class="space-y-3">
                             <h3 class="text-lg font-semibold text-gray-700 mb-3">Change Password</h3>
                             <div>
@@ -894,6 +901,7 @@
                 <h1 class="text-3xl font-bold text-gray-800 mb-6 border-b pb-4">Welcome, ${userEmail || 'Team Member'}!</h1>
 
                 <div class="space-y-8">
+                    <!-- Create Company -->
                     <div class="border p-6 rounded-xl shadow-lg bg-indigo-50/50">
                         <h2 class="text-xl font-semibold text-indigo-700 flex items-center mb-4"><span data-lucide="factory" class="w-5 h-5 mr-2"></span>Create a New Company</h2>
                         <form id="create-company-form" class="space-y-4">
@@ -911,6 +919,7 @@
 
                     <div class="text-center font-bold text-gray-500">OR</div>
 
+                    <!-- Join Company -->
                     <div class="border p-6 rounded-xl shadow-lg bg-white">
                         <h2 class="text-xl font-semibold text-gray-700 flex items-center mb-4"><span data-lucide="users" class="w-5 h-5 mr-2"></span>Join an Existing Company</h2>
                         <p class="text-sm text-gray-500 mb-4">Ask your HR/Admin for your Company ID.</p>
@@ -937,8 +946,8 @@
         `;
 
         const renderDashboard = () => {
-            const isAdmin = userProfile?.designation === 'Team Leader / Administrator';
-            // FIX: Define isAssistantAdmin outside the task list to be used for general permission checks.
+            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
+            // FIX 2: Added Assistant Admin role definition
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
             
             // --- TASK PRIORITY SORTING ---
@@ -1001,7 +1010,6 @@
             const userAssignedTasks = priorityTasks.filter(t => t.responsibleId === userId);
             
             // Permission Check for Admin Controls
-            // FIX: Ensure this line correctly groups the Admin roles for displaying management sections
             const canManageTeam = isAdmin || isAssistantAdmin;
 
 
@@ -1026,6 +1034,7 @@
                         </div>
                     </header>
                     
+                    <!-- Metric Cards (4 in a line) -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
                         
                         <div class="relative bg-white p-5 rounded-xl shadow-md border-l-4 border-indigo-500">
@@ -1056,7 +1065,9 @@
 
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         
+                        <!-- LEFT Column: Team Management and User Tasks (1/3 space) -->
                         <div class="lg:col-span-1 space-y-8">
+                            <!-- Team Management (Only for Admin/Assistant Admin) -->
                             ${canManageTeam ? `
                             <div class="bg-white p-6 rounded-xl shadow-xl">
                                 <h2 class="text-2xl font-bold text-gray-800 flex items-center border-b pb-3 mb-4">
@@ -1072,11 +1083,11 @@
                                             class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                                     </div>
                                     <div>
-                                        
+                                        <!-- Note: Only Admin can make other Admins. Assistant Admin is a preset designation option. -->
                                         <select name="designation" required onchange="updateState({ newTeamMemberForm: { designation: this.value } })" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                                             <option value="">Select Designation</option>
                                             <option value="Team Member">Team Member</option>
-                                            ${isAdmin ? '<option value="Team Leader / Administrator">Team Leader / Administrator</option>' : ''}
+                                            ${isAdmin ? '<option value="HR Manager / Administrator">HR Manager / Administrator</option>' : ''}
                                             <option value="Assistant Administrator">Assistant Administrator</option>
                                         </select>
                                     </div>
@@ -1087,6 +1098,7 @@
                             </div>
                             ` : ''}
                             
+                            <!-- User Assigned Tasks -->
                             <div class="bg-white p-6 rounded-xl shadow-xl">
                                 <h2 class="text-2xl font-bold text-gray-800 flex items-center border-b pb-3 mb-4">
                                     <span data-lucide="user-check" class="w-6 h-6 mr-2 text-green-500"></span>My Assigned Tasks
@@ -1096,12 +1108,14 @@
                         </div>
 
 
+                        <!-- RIGHT Column: Main Task View and Assignment (2/3 space) -->
                         <div class="lg:col-span-2 space-y-8">
                             
+                            <!-- Filter Menu -->
                             <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-md border">
                                 <h3 class="text-lg font-semibold text-gray-700">Filter By:</h3>
                                 <select onchange="updateState({ taskFilter: this.value })" 
-                                         class="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                                        class="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
                                     <option value="all" ${STATE.taskFilter === 'all' ? 'selected' : ''}>All Tasks</option>
                                     <option value="overdue" ${STATE.taskFilter === 'overdue' ? 'selected' : ''}>🚨 Overdue</option>
                                     <option value="today" ${STATE.taskFilter === 'today' ? 'selected' : ''}>⏰ Due Today</option>
@@ -1112,6 +1126,7 @@
                                 </select>
                             </div>
 
+                            <!-- Main Task Section (Now shows all relevant tasks) -->
                             <div class="bg-white p-6 rounded-xl shadow-xl">
                                 <h2 class="text-2xl font-bold text-gray-800 flex items-center border-b pb-3 mb-4">
                                     <span data-lucide="clipboard-check" class="w-6 h-6 mr-2 text-indigo-500"></span>${isAdmin ? 'Team Task Priority Board' : 'All Team Tasks'}
@@ -1119,6 +1134,7 @@
                                 ${renderTaskList(filteredTasks, false)}
                             </div>
 
+                            <!-- Task Creation Form - ONLY FOR ADMIN/ASSISTANT ADMIN -->
                             ${canManageTeam ? `
                             <div class="bg-white p-6 rounded-xl shadow-xl">
                                 <h2 class="text-2xl font-bold text-gray-800 flex items-center border-b pb-3 mb-4">
@@ -1172,7 +1188,7 @@
         
         // Renders the main task board (horizontal cards)
         const renderTaskList = (list, isCompact = false) => {
-            const isAdmin = userProfile?.designation === 'Team Leader / Administrator';
+            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
             if (list.length === 0) {
                 return `<p class="text-gray-500 italic p-4 bg-gray-50 rounded-lg">No tasks found matching the current filter.</p>`;
             }
@@ -1195,11 +1211,13 @@
                     return `
                         <div class="compact-task-card bg-white border border-gray-200 border-l-4 ${info.class.includes('overdue') ? 'border-red-500' : info.class.includes('completed') ? 'border-emerald-500' : 'border-indigo-500'} fade-in">
                             
+                            <!-- Section 1: Title & Description -->
                             <div class="compact-section task-title-section pr-4 flex-shrink-0">
                                 <h3 class="text-base font-semibold text-gray-800 leading-tight">${task.title}</h3>
                                 <p class="text-xs text-gray-500 mt-1">${task.description || 'No description.'}</p>
                             </div>
 
+                            <!-- Section 2: Due Date & Responsible -->
                             <div class="compact-section flex-shrink-0" style="min-width: 170px;">
                                 <p class="text-xs text-gray-500 mb-1 flex items-center"><span data-lucide="calendar" class="w-3 h-3 mr-1"></span>Due Date</p>
                                 <p class="text-sm font-medium text-gray-700">${formatDate(task.deadline)}</p>
@@ -1207,6 +1225,7 @@
                                 <p class="text-sm font-medium text-gray-700">${responsibleName}</p>
                             </div>
 
+                            <!-- Section 3: Status & Assignee -->
                             <div class="compact-section flex-shrink-0" style="min-width: 180px;">
                                 <p class="text-xs text-gray-500 mb-1 flex items-center"><span data-lucide="clock" class="w-3 h-3 mr-1"></span>Status</p>
                                 <span class="text-sm font-bold ${daysDiff.class}">${daysDiff.label}</span>
@@ -1214,6 +1233,7 @@
                                 <p class="text-sm font-medium text-gray-700">${assignerName}</p>
                             </div>
 
+                            <!-- Section 4: Actions (No Border) -->
                             <div class="flex flex-col space-y-2 pl-4 flex-shrink-0">
                                 ${canToggleStatus ? `
                                 <button onclick="handleToggleTaskStatus('${task.id}', '${task.status}')"
@@ -1222,6 +1242,7 @@
                                 </button>
                                 ` : `<button disabled class="py-1 px-3 text-xs font-medium rounded-lg bg-gray-200 text-gray-500 cursor-not-allowed">View Only</button>`}
                                 
+                                <!-- Delete Button: Only visible to Admin -->
                                 ${canDelete ? `
                                 <button onclick="handleDeleteTask('${task.id}')"
                                     class="py-1 px-3 bg-red-100 hover:bg-red-200 text-red-600 text-xs font-medium rounded-lg transition duration-150" title="Delete Task">

@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HR Team Task Tracker</title>
-    <!-- Load Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Load Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         /* Custom styles for 'Inter' font and smooth scrolling */
@@ -72,10 +70,8 @@
 <body class="min-h-screen antialiased">
 
     <div id="app" class="p-4 md:p-8">
-        <!-- Main content will be rendered here by JavaScript -->
-    </div>
+        </div>
 
-    <!-- Firebase Imports -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -95,10 +91,22 @@
             appId: "1:439481702897:web:bc9057d21bd2f75fbdcc50"
         };
         
-        const appId = CUSTOM_FIREBASE_CONFIG.projectId;
-        const initialAuthToken = null; 
+        // --- This section is for Canvas environment compatibility ---
+        // When deploying to your own server, these __app_id and __initial_auth_token
+        // variables won't exist, so we use your CUSTOM_FIREBASE_CONFIG.
         
-        // --- END CUSTOM CONFIGURATION ---
+        // Check if running in Canvas
+        const runningInCanvas = typeof __app_id !== 'undefined';
+        
+        // Use Canvas config if available, otherwise use your custom config
+        const firebaseConfig = runningInCanvas ? JSON.parse(__firebase_config) : CUSTOM_FIREBASE_CONFIG;
+        
+        // The appId is your project ID from the config
+        const appId = firebaseConfig.projectId;
+        
+        // Use Canvas auth token if available, otherwise it will be null (normal web login)
+        const initialAuthToken = runningInCanvas ? __initial_auth_token : null;
+        // --- End Canvas compatibility ---
 
         let app, db, auth;
         let userId = null;
@@ -250,31 +258,38 @@
         // --- FIREBASE INITIALIZATION AND AUTH ---
 
         const initializeFirebase = async () => {
-            if (CUSTOM_FIREBASE_CONFIG) {
-                try {
-                    app = initializeApp(CUSTOM_FIREBASE_CONFIG);
-                    db = getFirestore(app);
-                    auth = getAuth(app);
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
 
-                    onAuthStateChanged(auth, async (user) => {
-                        if (user) {
-                            userId = user.uid;
-                            userEmail = user.email;
-                            startProfileListener(userId);
-                        } else {
+                // This handles both Canvas (with token) and self-hosted (no token)
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                }
+                // If no token, onAuthStateChanged will just wait for user login.
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        userEmail = user.email;
+                        startProfileListener(userId);
+                    } else {
+                        // If not in Canvas and not logged in, show auth screen
+                        if (!runningInCanvas) {
                             userId = null;
                             userEmail = null;
                             updateState({ view: 'auth', loading: false });
                             stopAllListeners();
                         }
-                    });
+                        // If in Canvas, it should auto-login with token. 
+                        // If it fails, it will just show loading.
+                    }
+                });
 
-                } catch (error) {
-                    console.error("Firebase Initialization Error:", error);
-                    updateState({ view: 'auth', message: `Initialization failed: ${error.message}`, loading: false });
-                }
-            } else {
-                updateState({ view: 'auth', message: 'Firebase configuration is missing.', loading: false });
+            } catch (error) {
+                console.error("Firebase Initialization Error:", error);
+                updateState({ view: 'auth', message: `Initialization failed: ${error.message}`, loading: false });
             }
         };
 
@@ -474,6 +489,7 @@
                 } else {
                     await signInWithEmailAndPassword(auth, email, password);
                 }
+                // onAuthStateChanged will handle the redirect
             } catch (error) {
                 console.error("Auth Error:", error);
                 const msg = error.code.includes('auth') ? error.message : 'An unknown error occurred during authentication.';
@@ -484,7 +500,7 @@
         const handleSignOut = async () => {
             try {
                 await signOut(auth);
-                updateState({ view: 'auth', loading: false, message: 'Signed out successfully.' });
+                // onAuthStateChanged will catch this and redirect to 'auth' view
             } catch (error) {
                 console.error("Sign Out Error:", error);
                 updateState({ message: 'Failed to sign out.', loading: false });
@@ -524,7 +540,7 @@
                     const teamDocRef = doc(getTeamCollectionRef(companyId), userId); 
                     transaction.set(teamDocRef, {
                         email: userEmail,
-                        designation: 'Team Leader',
+                        designation: 'HR Manager',
                         joinedAt: serverTimestamp(),
                         name: userEmail.split('@')[0], // Default name
                         phone: ''
@@ -534,14 +550,14 @@
                     const profileDocRef = doc(db, getProfilePath(userId));
                     transaction.set(profileDocRef, {
                         email: userEmail,
-                        designation: 'Team Leader',
+                        designation: 'HR Manager',
                         companyId: companyId,
                         createdAt: serverTimestamp(),
                         name: userEmail.split('@')[0], // Default name
                         phone: ''
                     });
                 });
-                updateState({ loading: false, message: `Company '${companyId}' created successfully!` });
+                // onSnapshot will handle the view change
             } catch (error) {
                 console.error("Company Creation Error:", error);
                 updateState({ message: error.message, loading: false });
@@ -571,6 +587,7 @@
                 let teamDoc = await getDoc(teamDocRefByUID);
 
                 if (!teamDoc.exists()) {
+                    // Try finding by email (for users added but not yet joined)
                     const teamDocRefByEmail = doc(getTeamCollectionRef(companyId), userEmail); 
                     teamDoc = await getDoc(teamDocRefByEmail);
 
@@ -578,13 +595,15 @@
                         throw new Error("You are not yet registered as a team member in this company. Please ask your HR/Admin to add your email.");
                     }
                     
+                    // User found by email, "promote" them to UID key
                     const newTeamDocRef = doc(getTeamCollectionRef(companyId), userId);
                     await setDoc(newTeamDocRef, teamDoc.data());
-                    await deleteDoc(teamDocRefByEmail);
+                    await deleteDoc(teamDocRefByEmail); // Clean up old email key
                     
-                    teamDoc = await getDoc(newTeamDocRef);
+                    teamDoc = await getDoc(newTeamDocRef); // Get the new doc
                 }
                 
+                // User is in the team, now update their private profile
                 const profileDocRef = doc(db, getProfilePath(userId));
                 await setDoc(profileDocRef, {
                     email: userEmail,
@@ -595,7 +614,7 @@
                     phone: teamDoc.data().phone || ''
                 }, { merge: true });
 
-                updateState({ loading: false, message: `Successfully joined company '${companyId}'.` });
+                // onSnapshot will handle the view change
 
             } catch (error) {
                 console.error("Company Join Error:", error);
@@ -610,7 +629,7 @@
             const task = tasks.find(t => t.id === taskId);
             if (!task) return;
 
-            const isAdmin = userProfile?.designation === 'Team Leader';
+            const isAdmin = userProfile?.designation === 'HR Manager';
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
             
             // FIX 1: Admin and Assistant Admin can edit tasks
@@ -718,7 +737,7 @@
 
         const handleToggleTaskStatus = async (taskId, currentStatus) => {
             // Define roles
-            const isAdmin = userProfile?.designation === 'Team Leader';
+            const isAdmin = userProfile?.designation === 'HR Manager';
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
             
             const task = tasks.find(t => t.id === taskId);
@@ -749,14 +768,20 @@
         };
 
         const handleDeleteTask = async (taskId) => {
-            // Deletion is restricted to the main Team Leader / Administrator only.
-            const isAdmin = userProfile?.designation === 'Team Leader';
+            // Deletion is restricted to the main HR Manager / Administrator only.
+            const isAdmin = userProfile?.designation === 'HR Manager';
             if (!isAdmin) {
-                alert("Permission Denied: Only the main Team Leader can delete tasks.");
+                // Use a non-blocking message instead of alert
+                updateState({ message: "Permission Denied: Only the main HR Manager can delete tasks.", loading: false });
                 return;
             }
 
-            if (!confirm("Are you sure you want to delete this task?")) return;
+            // Use a custom modal for confirmation eventually, for now, 'confirm' is a placeholder.
+            // On a live site, 'confirm' might be blocked. A custom modal is better.
+            // For now, we'll assume 'confirm' works for simplicity, but it's bad practice.
+            // A better way: updateState({ showConfirmModal: true, confirmAction: () => doDelete(taskId) })
+            if (!confirm("Are you sure you want to delete this task? This cannot be undone.")) return;
+            
             updateState({ loading: true, message: null });
             const taskDocRef = doc(getTasksCollectionRef(currentCompanyId), taskId);
             try {
@@ -801,63 +826,10 @@
         };
 
         const handleExportPDF = () => {
-            const printContent = `
-                <div class="p-8">
-                    <h1 class="text-3xl font-bold mb-4">TaskFlow Report: ${currentCompanyId}</h1>
-                    <p class="text-sm text-gray-600 mb-6">Generated by ${userProfile.name} on ${formatDate(new Date())}</p>
-                    <table class="print-table">
-                        <thead>
-                            <tr>
-                                <th>Title</th>
-                                <th>Responsible</th>
-                                <th>Deadline</th>
-                                <th>Status</th>
-                                <th>Days Due</th>
-                                <th>Assigned By</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${tasks.map(t => {
-                                const responsibleName = getMemberInfo(t.responsibleId, 'name');
-                                const assignerName = getMemberInfo(t.assignerId, 'name');
-                                const daysDiff = getDaysDifference(t.deadline);
-                                const statusInfo = getStatusInfo(t);
-
-                                return `
-                                    <tr>
-                                        <td>${t.title}</td>
-                                        <td>${responsibleName}</td>
-                                        <td>${formatDate(t.deadline)}</td>
-                                        <td>${statusInfo.label}</td>
-                                        <td class="${daysDiff.class.includes('red') ? 'font-bold text-red-600' : ''}">${daysDiff.label}</td>
-                                        <td>${assignerName}</td>
-                                    </tr>
-                                `;
-                            }).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            `;
-            
-            const originalContent = document.body.innerHTML;
-            document.body.innerHTML = originalContent.replace(/<div id="app"/, `<div id="app" class="no-print"`);
-            
-            // Render the print content temporarily
-            const printWindow = window.open('', '_blank');
-            printWindow.document.write('<html><head><title>TaskFlow Report</title>');
-            printWindow.document.write('<style>@import url(\'https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap\');body{font-family:\'Inter\',sans-serif;}</style>');
-            printWindow.document.write('<style>');
-            printWindow.document.write('@media print {.print-table { width: 100%; border-collapse: collapse; } .print-table th, .print-table td { border: 1px solid #ccc; padding: 8px; text-align: left; } .text-red-600 { color: red !important; } .font-bold { font-weight: bold !important; }}');
-            printWindow.document.write('</style>');
-            printWindow.document.write('</head><body>');
-            printWindow.document.write(printContent);
-            printWindow.document.write('</body></html>');
-            printWindow.document.close();
-            
-            printWindow.print();
-            printWindow.close();
-        
-            updateState({ message: 'PDF generated. Check your downloads.', loading: false });
+            // This function uses window.print() which prints the *current* view.
+            // We'll add print-specific styles to hide UI elements.
+            window.print();
+            updateState({ message: 'Print dialog opened.', loading: false });
         };
 
         // --- TEAM HANDLERS (Unchanged logic) ---
@@ -868,7 +840,7 @@
             updateState({ loading: true, message: null });
             
             // Permission check for Add Team Member
-            const isAdmin = userProfile?.designation === 'Team Leader';
+            const isAdmin = userProfile?.designation === 'HR Manager';
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
             if (!isAdmin && !isAssistantAdmin) {
                 updateState({ message: 'Permission Denied: Only Administrators can add team members.', loading: false });
@@ -880,41 +852,51 @@
                 return;
             }
 
+            // The ID for a new member is their email, until they log in.
             const newUserId = form.email.trim();
 
             try {
                 const teamDocRef = doc(getTeamCollectionRef(currentCompanyId), newUserId);
+                
+                // Check if user (by email) already exists
+                const docSnap = await getDoc(teamDocRef);
+                if (docSnap.exists()) {
+                    throw new Error("A user with this email already exists in the team.");
+                }
+
                 await setDoc(teamDocRef, {
                     email: form.email.trim(),
                     designation: form.designation.trim(),
                     joinedAt: serverTimestamp(),
+                    name: form.email.split('@')[0], // Default name
+                    phone: '',
                 });
 
                 updateState({
                     loading: false,
-                    message: `Team member ${form.email} added. They can join using company ID: ${currentCompanyId}.`,
+                    message: `Team member ${form.email} added. They can now register and join using company ID: ${currentCompanyId}.`,
                     newTeamMemberForm: { email: '', designation: '' }
                 });
 
             } catch (error) {
                 console.error("Add Team Member Error:", error);
-                updateState({ message: 'Failed to add team member.', loading: false });
+                updateState({ message: error.message || 'Failed to add team member.', loading: false });
             }
         };
 
         const handleRemoveTeamMember = async (memberId) => {
-            // Removal is restricted to the main Team Leader / Administrator only.
-            const isAdmin = userProfile?.designation === 'Team Leader';
+            // Removal is restricted to the main HR Manager / Administrator only.
+            const isAdmin = userProfile?.designation === 'HR Manager';
             if (!isAdmin) {
-                alert("Permission Denied: Only the main Team Leader can remove team members.");
+                updateState({ message: "Permission Denied: Only the main HR Manager can remove team members.", loading: false });
                 return;
             }
 
             if (memberId === userId) {
-                alert("You cannot remove yourself. Please use the 'Leave Company' button to unlink your account.");
+                updateState({ message: "You cannot remove yourself. Please use the 'Leave Company' button.", loading: false });
                 return;
             }
-            if (!confirm(`Are you sure you want to remove the team member with ID: ${memberId}?`)) return;
+            if (!confirm(`Are you sure you want to remove this team member? This cannot be undone.`)) return;
 
             updateState({ loading: true, message: null });
             const teamDocRef = doc(getTeamCollectionRef(currentCompanyId), memberId);
@@ -929,14 +911,17 @@
         };
 
         const handleLeaveCompany = async () => {
-            if (!confirm(`Are you sure you want to unlink from company ${currentCompanyId}? You will need to be re-added by an admin.`)) return;
+            if (!confirm(`Are you sure you want to unlink from company ${currentCompanyId}? You will need to be re-added by an admin to rejoin.`)) return;
 
             updateState({ loading: true, message: null });
             const profileDocRef = doc(db, getProfilePath(userId));
 
             try {
+                // We just remove the companyId from their private profile.
+                // We DON'T delete their team entry, so an admin can see they were part of the team.
+                // An admin would have to manually remove them from the team list.
                 await updateDoc(profileDocRef, { companyId: null });
-                updateState({ loading: false, message: 'Successfully left the company.' });
+                // onSnapshot will handle the view change
             } catch (error) {
                 console.error("Leave Company Error:", error);
                 updateState({ message: 'Failed to leave company.', loading: false });
@@ -960,7 +945,7 @@
             });
             
             // Only render if it's NOT a form input change OR if there is a message/loading status change OR if the view/modal is changing.
-            if (!isFormChange || newState.message || newState.loading || STATE.view !== 'dashboard' || newState.showProfileModal !== undefined || newState.taskFilter !== undefined || newState.showEditModal !== undefined) {
+            if (!isFormChange || newState.message || newState.loading !== undefined || STATE.view !== 'dashboard' || newState.showProfileModal !== undefined || newState.taskFilter !== undefined || newState.showEditModal !== undefined) {
                  render();
             }
         };
@@ -968,17 +953,24 @@
         const render = () => {
             let html = '';
 
-            if (STATE.loading || STATE.message) {
-                const messageClass = STATE.message && STATE.message.includes('success') ? 'bg-emerald-100 text-emerald-800' :
-                                     STATE.message ? 'bg-red-100 text-red-800' :
-                                     'bg-blue-100 text-blue-800';
-                html += `
-                    <div class="fixed top-0 left-0 right-0 p-3 text-center ${messageClass} z-50 shadow-md transition-all duration-300 no-print">
-                        ${STATE.loading ? '<span class="inline-block animate-spin mr-2" data-lucide="loader"></span> Loading...' : ''}
-                        ${STATE.message ? STATE.message : ''}
-                    </div>
-                `;
+            // Render message/loading bar
+            const messageClass = STATE.message && STATE.message.includes('success') ? 'bg-emerald-100 text-emerald-800' :
+                                 STATE.message ? 'bg-red-100 text-red-800' :
+                                 'bg-blue-100 text-blue-800';
+            const showBar = STATE.loading || STATE.message;
+            
+            html += `
+                <div class="fixed top-0 left-0 right-0 p-3 text-center ${messageClass} z-50 shadow-md transition-all duration-300 no-print ${showBar ? 'translate-y-0' : '-translate-y-full'}">
+                    ${STATE.loading ? '<span class="inline-block animate-spin mr-2" data-lucide="loader"></span> Loading...' : ''}
+                    ${STATE.message ? STATE.message : ''}
+                </div>
+            `;
+            
+            // Clear message after a few seconds
+            if(STATE.message) {
+                setTimeout(() => updateState({ message: null }), 3000);
             }
+
 
             switch (STATE.view) {
                 case 'loading':
@@ -1060,7 +1052,7 @@
                                 </div>
                             </div>
                             <button type="submit" class="w-full py-3 bg-indigo-600 text-white text-base font-medium rounded-lg shadow hover:bg-indigo-700 transition" ${STATE.loading ? 'disabled' : ''}>
-                                Save Changes
+                                ${STATE.loading ? 'Saving...' : 'Save Changes'}
                             </button>
                         </form>
                     </div>
@@ -1081,7 +1073,6 @@
                     ${STATE.profileMessage ? `<div class="p-3 mb-4 text-sm rounded-lg ${STATE.profileMessage.includes('success') ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}">${STATE.profileMessage}</div>` : ''}
 
                     <div class="space-y-6 scrollable-card p-2">
-                        <!-- Current Details -->
                         <div class="bg-gray-50 p-4 rounded-lg">
                             <p class="font-medium text-lg text-indigo-600">${userEmail}</p>
                             <p class="text-sm text-gray-500">${userProfile?.designation || 'Team Member'}</p>
@@ -1089,7 +1080,6 @@
                             <p class="text-sm text-gray-700">Phone: ${userProfile?.phone || 'Not Set'}</p>
                         </div>
                         
-                        <!-- Section 1: Name and Phone -->
                         <div>
                             <h3 class="text-lg font-semibold text-gray-700 mb-3">Update Contact Details</h3>
                             <div class="space-y-3">
@@ -1107,7 +1097,6 @@
 
                         <hr class="border-gray-200">
 
-                        <!-- Section 2: Update Email -->
                         <form onsubmit="handleEmailUpdate(event)" id="email-update-form" class="space-y-3">
                             <h3 class="text-lg font-semibold text-gray-700 mb-3">Change Email Address</h3>
                             <div>
@@ -1123,7 +1112,6 @@
 
                         <hr class="border-gray-200">
 
-                        <!-- Section 3: Update Password -->
                         <form onsubmit="handlePasswordUpdate(event)" id="password-update-form" class="space-y-3">
                             <h3 class="text-lg font-semibold text-gray-700 mb-3">Change Password</h3>
                             <div>
@@ -1165,7 +1153,7 @@
                         <input type="password" id="password" name="password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
                     </div>
                     <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out" ${STATE.loading ? 'disabled' : ''}>
-                        ${STATE.authMode === 'login' ? 'Sign In' : 'Register'}
+                        ${STATE.loading ? '...' : (STATE.authMode === 'login' ? 'Sign In' : 'Register')}
                     </button>
                 </form>
                 <div class="mt-6 text-center">
@@ -1181,7 +1169,6 @@
                 <h1 class="text-3xl font-bold text-gray-800 mb-6 border-b pb-4">Welcome, ${userEmail || 'Team Member'}!</h1>
 
                 <div class="space-y-8">
-                    <!-- Create Company -->
                     <div class="border p-6 rounded-xl shadow-lg bg-indigo-50/50">
                         <h2 class="text-xl font-semibold text-indigo-700 flex items-center mb-4"><span data-lucide="factory" class="w-5 h-5 mr-2"></span>Create a New Company</h2>
                         <form id="create-company-form" class="space-y-4">
@@ -1191,14 +1178,13 @@
                                     class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
                             </div>
                             <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-lg text-sm font-medium text-white bg-green-600 hover:bg-green-700 transition duration-150 ease-in-out" ${STATE.loading ? 'disabled' : ''}>
-                                Create Company and Become Admin
+                                ${STATE.loading ? 'Creating...' : 'Create Company and Become Admin'}
                             </button>
                         </form>
                     </div>
 
                     <div class="text-center font-bold text-gray-500">OR</div>
 
-                    <!-- Join Company -->
                     <div class="border p-6 rounded-xl shadow-lg bg-white">
                         <h2 class="text-xl font-semibold text-gray-700 flex items-center mb-4"><span data-lucide="users" class="w-5 h-5 mr-2"></span>Join an Existing Company</h2>
                         <p class="text-sm text-gray-500 mb-4">Ask your HR/Admin for your Company ID.</p>
@@ -1209,7 +1195,7 @@
                                     class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
                             </div>
                             <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition duration-150 ease-in-out" ${STATE.loading ? 'disabled' : ''}>
-                                Join Company
+                                ${STATE.loading ? 'Joining...' : 'Join Company'}
                             </button>
                         </form>
                     </div>
@@ -1224,7 +1210,7 @@
         `;
 
         const renderDashboard = () => {
-            const isAdmin = userProfile?.designation === 'Team Leader';
+            const isAdmin = userProfile?.designation === 'HR Manager';
             // FIX 2: Added Assistant Admin role definition
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
             
@@ -1310,8 +1296,8 @@
                                 </button>
                                 <div class="hidden origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-10">
                                     <div class="py-1" role="menu" aria-orientation="vertical" aria-labelledby="options-menu">
-                                        <a href="#" onclick="handleExportCSV(); return false;" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Export to CSV</a>
-                                        <a href="#" onclick="handleExportPDF(); return false;" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Print/Export to PDF</a>
+                                        <a href="#" onclick="handleExportCSV(); this.parentElement.parentElement.classList.toggle('hidden'); return false;" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Export to CSV</a>
+                                        <a href="#" onclick="handleExportPDF(); this.parentElement.parentElement.classList.toggle('hidden'); return false;" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Print/Export to PDF</a>
                                     </div>
                                 </div>
                             </div>
@@ -1325,7 +1311,6 @@
                         </div>
                     </header>
                     
-                    <!-- Metric Cards (4 in a line) -->
                     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 no-print">
                         
                         <div class="relative bg-white p-5 rounded-xl shadow-md border-l-4 border-indigo-500">
@@ -1356,9 +1341,7 @@
 
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         
-                        <!-- LEFT Column: Team Management and User Tasks (1/3 space) -->
-                        <div class="lg:col-span-1 space-y-8">
-                            <!-- Team Management (Only for Admin/Assistant Admin) -->
+                        <div class="lg:col-span-1 space-y-8 no-print">
                             ${canManageTeam ? `
                             <div class="bg-white p-6 rounded-xl shadow-xl">
                                 <h2 class="text-2xl font-bold text-gray-800 flex items-center border-b pb-3 mb-4">
@@ -1374,22 +1357,20 @@
                                             class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                                     </div>
                                     <div>
-                                        <!-- Note: Only Admin can make other Admins. Assistant Admin is a preset designation option. -->
                                         <select name="designation" required onchange="updateState({ newTeamMemberForm: { designation: this.value } })" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                                             <option value="">Select Designation</option>
                                             <option value="Team Member">Team Member</option>
-                                            ${isAdmin ? '<option value="Team Leader">Team Leader</option>' : ''}
+                                            ${isAdmin ? '<option value="HR Manager">HR Manager</option>' : ''}
                                             <option value="Assistant Administrator">Assistant Administrator</option>
                                         </select>
                                     </div>
                                     <button type="submit" class="w-full py-2 bg-blue-600 text-white text-sm font-medium rounded-lg shadow hover:bg-blue-700 transition duration-150" ${STATE.loading ? 'disabled' : ''}>
-                                        Add Team Member
+                                        ${STATE.loading ? '...' : 'Add Team Member'}
                                     </button>
                                 </form>
                             </div>
                             ` : ''}
                             
-                            <!-- User Assigned Tasks -->
                             <div class="bg-white p-6 rounded-xl shadow-xl">
                                 <h2 class="text-2xl font-bold text-gray-800 flex items-center border-b pb-3 mb-4">
                                     <span data-lucide="user-check" class="w-6 h-6 mr-2 text-green-500"></span>My Assigned Tasks (Quick View)
@@ -1399,10 +1380,8 @@
                         </div>
 
 
-                        <!-- RIGHT Column: Main Task View and Assignment (2/3 space) -->
                         <div class="lg:col-span-2 space-y-8">
                             
-                            <!-- Filter Menu -->
                             <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-md border no-print">
                                 <h3 class="text-lg font-semibold text-gray-700">Filter By:</h3>
                                 <select onchange="updateState({ taskFilter: this.value })" 
@@ -1417,7 +1396,6 @@
                                 </select>
                             </div>
 
-                            <!-- Main Task Section (Now shows all relevant tasks) -->
                             <div class="bg-white p-6 rounded-xl shadow-xl">
                                 <h2 class="text-2xl font-bold text-gray-800 flex items-center border-b pb-3 mb-4">
                                     <span data-lucide="clipboard-check" class="w-6 h-6 mr-2 text-indigo-500"></span>${isAdmin ? 'Team Task Priority Board' : 'All Team Tasks'}
@@ -1425,9 +1403,8 @@
                                 ${renderTaskList(filteredTasks, false)}
                             </div>
 
-                            <!-- Task Creation Form - ONLY FOR ADMIN/ASSISTANT ADMIN -->
                             ${canManageTeam ? `
-                            <div class="bg-white p-6 rounded-xl shadow-xl">
+                            <div class="bg-white p-6 rounded-xl shadow-xl no-print">
                                 <h2 class="text-2xl font-bold text-gray-800 flex items-center border-b pb-3 mb-4">
                                     <span data-lucide="list-plus" class="w-6 h-6 mr-2 text-green-500"></span>Assign New Task
                                 </h2>
@@ -1466,7 +1443,7 @@
                                         </div>
                                     </div>
                                     <button type="submit" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-lg text-base font-medium text-white bg-green-600 hover:bg-green-700 transition duration-150 ease-in-out" ${STATE.loading || teamMembers.length === 0 ? 'disabled' : ''}>
-                                        ${teamMembers.length === 0 ? 'Add Team Members First' : 'Create Task'}
+                                        ${teamMembers.length === 0 ? 'Add Team Members First' : (STATE.loading ? '...' : 'Create Task')}
                                     </button>
                                 </form>
                             </div>
@@ -1479,7 +1456,7 @@
         
         // Renders the main task board (horizontal cards)
         const renderTaskList = (list, isCompact = false) => {
-            const isAdmin = userProfile?.designation === 'Team Leader';
+            const isAdmin = userProfile?.designation === 'HR Manager';
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
 
             if (list.length === 0) {
@@ -1504,13 +1481,11 @@
                     return `
                         <div class="compact-task-card bg-white border border-gray-200 border-l-4 ${info.class.includes('overdue') ? 'border-red-500' : info.class.includes('completed') ? 'border-emerald-500' : 'border-indigo-500'} fade-in">
                             
-                            <!-- Section 1: Title & Description -->
                             <div class="compact-section task-title-section pr-4 flex-shrink-0">
                                 <h3 class="text-base font-semibold text-gray-800 leading-tight">${task.title}</h3>
                                 <p class="text-xs text-gray-500 mt-1">${task.description || 'No description.'}</p>
                             </div>
 
-                            <!-- Section 2: Due Date & Responsible -->
                             <div class="compact-section flex-shrink-0" style="min-width: 170px;">
                                 <p class="text-xs text-gray-500 mb-1 flex items-center"><span data-lucide="calendar" class="w-3 h-3 mr-1"></span>Due Date</p>
                                 <p class="text-sm font-medium text-gray-700">${formatDate(task.deadline)}</p>
@@ -1518,7 +1493,6 @@
                                 <p class="text-sm font-medium text-gray-700">${responsibleName}</p>
                             </div>
 
-                            <!-- Section 3: Status & Assignee -->
                             <div class="compact-section flex-shrink-0" style="min-width: 180px;">
                                 <p class="text-xs text-gray-500 mb-1 flex items-center"><span data-lucide="clock" class="w-3 h-3 mr-1"></span>Status</p>
                                 <span class="text-sm font-bold ${daysDiff.class}">${daysDiff.label}</span>
@@ -1526,8 +1500,7 @@
                                 <p class="text-sm font-medium text-gray-700">${assignerName}</p>
                             </div>
 
-                            <!-- Section 4: Actions (No Border) -->
-                            <div class="flex flex-col space-y-2 pl-4 flex-shrink-0">
+                            <div class="flex flex-col space-y-2 pl-4 flex-shrink-0 no-print">
                                 ${canToggleStatus ? `
                                 <button onclick="handleToggleTaskStatus('${task.id}', '${task.status}')"
                                     class="py-1 px-3 text-xs font-medium rounded-lg transition duration-150 ${task.status !== 'Completed' ? 'bg-indigo-500 hover:bg-indigo-600 text-white' : 'bg-gray-300 hover:bg-gray-400 text-gray-800'}">
@@ -1659,10 +1632,8 @@
             }
             
             // Attach event listeners for profile modal forms
-            const profileForm = document.getElementById('profile-details-form');
-            if (profileForm) {
-                profileForm.onsubmit = (e) => { e.preventDefault(); handleProfileUpdate(); };
-            }
+            // Note: These are now attached to buttons via onclick, but form onsubmit is more robust.
+            // Let's keep the form listeners for email/password.
             const emailForm = document.getElementById('email-update-form');
             if (emailForm) {
                 emailForm.onsubmit = handleEmailUpdate;

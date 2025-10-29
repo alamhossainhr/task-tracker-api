@@ -1289,7 +1289,8 @@
                             <button onclick="updateState({ showProfileModal: true })" class="px-4 py-2 bg-indigo-500 text-white text-sm font-medium rounded-lg shadow hover:bg-indigo-600 transition duration-150">
                                 My Profile
                             </button>
-                            ${isAdmin ? `
+                            
+                            ${canManageTeam ? `
                             <div class="relative inline-block text-left">
                                 <button onclick="this.nextElementSibling.classList.toggle('hidden')" type="button" class="px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg shadow hover:bg-gray-700 transition duration-150">
                                     Export Data
@@ -1302,6 +1303,7 @@
                                 </div>
                             </div>
                             ` : ''}
+                            
                             <button onclick="handleLeaveCompany()" class="px-4 py-2 bg-yellow-500 text-white text-sm font-medium rounded-lg shadow hover:bg-yellow-600 transition duration-150">
                                 Leave Company
                             </button>

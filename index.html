@@ -540,7 +540,7 @@
                     const teamDocRef = doc(getTeamCollectionRef(companyId), userId); 
                     transaction.set(teamDocRef, {
                         email: userEmail,
-                        designation: 'HR Manager',
+                        designation: 'HR Manager/Administrator', // <-- FIX HERE
                         joinedAt: serverTimestamp(),
                         name: userEmail.split('@')[0], // Default name
                         phone: ''
@@ -550,7 +550,7 @@
                     const profileDocRef = doc(db, getProfilePath(userId));
                     transaction.set(profileDocRef, {
                         email: userEmail,
-                        designation: 'HR Manager',
+                        designation: 'HR Manager/Administrator', // <-- FIX HERE
                         companyId: companyId,
                         createdAt: serverTimestamp(),
                         name: userEmail.split('@')[0], // Default name
@@ -629,7 +629,7 @@
             const task = tasks.find(t => t.id === taskId);
             if (!task) return;
 
-            const isAdmin = userProfile?.designation === 'HR Manager';
+            const isAdmin = userProfile?.designation === 'HR Manager/Administrator'; // <-- FIX HERE
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
             
             // FIX 1: Admin and Assistant Admin can edit tasks
@@ -737,7 +737,7 @@
 
         const handleToggleTaskStatus = async (taskId, currentStatus) => {
             // Define roles
-            const isAdmin = userProfile?.designation === 'HR Manager';
+            const isAdmin = userProfile?.designation === 'HR Manager/Administrator'; // <-- FIX HERE
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
             
             const task = tasks.find(t => t.id === taskId);
@@ -769,10 +769,10 @@
 
         const handleDeleteTask = async (taskId) => {
             // Deletion is restricted to the main HR Manager / Administrator only.
-            const isAdmin = userProfile?.designation === 'HR Manager';
+            const isAdmin = userProfile?.designation === 'HR Manager/Administrator'; // <-- FIX HERE
             if (!isAdmin) {
                 // Use a non-blocking message instead of alert
-                updateState({ message: "Permission Denied: Only the main HR Manager can delete tasks.", loading: false });
+                updateState({ message: "Permission Denied: Only the main HR Manager/Administrator can delete tasks.", loading: false });
                 return;
             }
 
@@ -840,7 +840,7 @@
             updateState({ loading: true, message: null });
             
             // Permission check for Add Team Member
-            const isAdmin = userProfile?.designation === 'HR Manager';
+            const isAdmin = userProfile?.designation === 'HR Manager/Administrator'; // <-- FIX HERE
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
             if (!isAdmin && !isAssistantAdmin) {
                 updateState({ message: 'Permission Denied: Only Administrators can add team members.', loading: false });
@@ -886,9 +886,9 @@
 
         const handleRemoveTeamMember = async (memberId) => {
             // Removal is restricted to the main HR Manager / Administrator only.
-            const isAdmin = userProfile?.designation === 'HR Manager';
+            const isAdmin = userProfile?.designation === 'HR Manager/Administrator'; // <-- FIX HERE
             if (!isAdmin) {
-                updateState({ message: "Permission Denied: Only the main HR Manager can remove team members.", loading: false });
+                updateState({ message: "Permission Denied: Only the main HR Manager/Administrator can remove team members.", loading: false });
                 return;
             }
 
@@ -1210,7 +1210,7 @@
         `;
 
         const renderDashboard = () => {
-            const isAdmin = userProfile?.designation === 'HR Manager';
+            const isAdmin = userProfile?.designation === 'HR Manager/Administrator'; // <-- FIX HERE
             // FIX 2: Added Assistant Admin role definition
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
             
@@ -1362,8 +1362,7 @@
                                         <select name="designation" required onchange="updateState({ newTeamMemberForm: { designation: this.value } })" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
                                             <option value="">Select Designation</option>
                                             <option value="Team Member">Team Member</option>
-                                            ${isAdmin ? '<option value="HR Manager">HR Manager</option>' : ''}
-                                            <option value="Assistant Administrator">Assistant Administrator</option>
+                                            ${isAdmin ? '<option value="HR Manager/Administrator">HR Manager/Administrator</option>' : ''} <option value="Assistant Administrator">Assistant Administrator</option>
                                         </select>
                                     </div>
                                     <button type="submit" class="w-full py-2 bg-blue-600 text-white text-sm font-medium rounded-lg shadow hover:bg-blue-700 transition duration-150" ${STATE.loading ? 'disabled' : ''}>
@@ -1458,7 +1457,1680 @@
         
         // Renders the main task board (horizontal cards)
         const renderTaskList = (list, isCompact = false) => {
-            const isAdmin = userProfile?.designation === 'HR Manager';
+            const isAdmin = userProfile?.designation === 'HR Manager/Administrator'; // <-- FIX HERE
+            const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
+
+            if (list.length === 0) {
+                return `<p class="text-gray-500 italic p-4 bg-gray-50 rounded-lg">No tasks found matching the current filter.</p>`;
+            }
+            
+            // RENDER: HORIZONTAL TASK BOARD LAYOUT
+            return `
+            <div class="space-y-3 scrollable-card">
+                ${list.map(task => {
+                    const info = getStatusInfo(task);
+                    const daysDiff = getDaysDifference(task.deadline);
+                    const responsibleName = getMemberInfo(task.responsibleId, 'name');
+                    const assignerName = getMemberInfo(task.assignerId, 'name');
+                    const isResponsible = task.responsibleId === userId;
+
+                    // Determine if the action button should be enabled/visible
+                    const canToggleStatus = isResponsible || isAdmin || isAssistantAdmin;
+                    const canDelete = isAdmin; // Only the main Admin can delete.
+                    const canEdit = isAdmin || isAssistantAdmin; // Only Admins/Assistant Admins can edit.
+
+                    return `
+                        <div class="compact-task-card bg-white border border-gray-200 border-l-4 ${info.class.includes('overdue') ? 'border-red-500' : info.class.includes('completed') ? 'border-emerald-500' : 'border-indigo-500'} fade-in">
+                            
+                            <div class="compact-section task-title-section pr-4 flex-shrink-0">
+                                <h3 class="text-base font-semibold text-gray-800 leading-tight">${task.title}</h3>
+                                <p class="text-xs text-gray-500 mt-1">${task.description || 'No description.'}</p>
+                            </div>
+
+                            <div class="compact-section flex-shrink-0" style="min-width: 170px;">
+                                <p class="text-xs text-gray-500 mb-1 flex items-center"><span data-lucide="calendar" class="w-3 h-3 mr-1"></span>Due Date</p>
+                                <p class="text-sm font-medium text-gray-700">${formatDate(task.deadline)}</p>
+                                <p class="text-xs text-gray-500 mt-2 mb-1 flex items-center"><span data-lucide="user-check" class="w-3 h-3 mr-1"></span>Responsible</p>
+                                <p class="text-sm font-medium text-gray-700">${responsibleName}</p>
+                            </div>
+
+                            <div class="compact-section flex-shrink-0" style="min-width: 180px;">
+                                <p class="text-xs text-gray-500 mb-1 flex items-center"><span data-lucide="clock" class="w-3 h-3 mr-1"></span>Status</p>
+                                <span class="text-sm font-bold ${daysDiff.class}">${daysDiff.label}</span>
+                                <p class="text-xs text-gray-500 mt-2 mb-1 flex items-center"><span data-lucide="user-plus" class="w-3 h-3 mr-1"></span>Assigned By</p>
+                                <p class="text-sm font-medium text-gray-700">${assignerName}</p>
+                            </div>
+
+                            <div class="flex flex-col space-y-2 pl-4 flex-shrink-0 no-print">
+                                ${canToggleStatus ? `
+                                <button onclick="handleToggleTaskStatus('${task.id}', '${task.status}')"
+                                    class="py-1 px-3 text-xs font-medium rounded-lg transition duration-150 ${task.status !== 'Completed' ? 'bg-indigo-500 hover:bg-indigo-600 text-white' : 'bg-gray-300 hover:bg-gray-400 text-gray-800'}">
+                                    ${task.status === 'Completed' ? 'Mark as Pending' : 'Mark as Completed'}
+                                </button>
+                                ` : `<button disabled class="py-1 px-3 text-xs font-medium rounded-lg bg-gray-200 text-gray-500 cursor-not-allowed">View Only</button>`}
+                                
+                                <div class="flex space-x-2">
+                                    ${canEdit ? `
+                                    <button onclick="handleEditTask('${task.id}')"
+                                        class="py-1 px-2 flex-1 bg-blue-100 hover:bg-blue-200 text-blue-600 text-xs font-medium rounded-lg transition duration-150" title="Edit Task">
+                                        <span data-lucide="edit-3" class="w-4 h-4 mx-auto"></span>
+                                    </button>
+                                    ` : ''}
+                                    ${canDelete ? `
+                                    <button onclick="handleDeleteTask('${task.id}')"
+                                        class="py-1 px-2 flex-1 bg-red-100 hover:bg-red-200 text-red-600 text-xs font-medium rounded-lg transition duration-150" title="Delete Task">
+                                        <span data-lucide="trash-2" class="w-4 h-4 mx-auto"></span>
+                                    </button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+            `;
+        };
+        
+        // Renders the compact list for the left sidebar
+        const renderUserTaskList = (list) => {
+            if (list.length === 0) {
+                return `<p class="text-gray-500 italic p-4 bg-gray-50 rounded-lg text-sm">You have no tasks assigned.</p>`;
+            }
+            
+            // Limit to top 5 urgent tasks for quick view
+            const limitedList = list.slice(0, 5);
+            
+            return `
+            <div class="space-y-3 scrollable-card">
+                ${limitedList.map(task => {
+                    const info = getStatusInfo(task);
+                    const daysDiff = getDaysDifference(task.deadline);
+
+                    return `
+                        <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-200 border-l-4 ${info.class.includes('overdue') ? 'border-red-500' : info.class.includes('completed') ? 'border-emerald-500' : 'border-indigo-500'} fade-in">
+                            <div class="flex justify-between items-start">
+                                <h3 class="text-sm font-semibold text-gray-800 leading-tight">${task.title}</h3>
+                                <span class="text-[10px] font-semibold px-2 py-0.5 rounded-full ${info.class}">${info.label}</span>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1 flex items-center">
+                                <span data-lucide="calendar" class="w-3 h-3 mr-1 text-gray-400"></span>Due: ${formatDate(task.deadline)}
+                            </p>
+                            <p class="text-xs ${daysDiff.class} mt-1">
+                                ${daysDiff.label}
+                            </p>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+            `;
+        };
+
+
+        const renderTeamList = () => {
+            if (teamMembers.length === 0) {
+                return `<p class="text-gray-500 italic p-4 bg-gray-50 rounded-lg">No team members added yet.</p>`;
+            }
+            
+            // FIX 1: Display Name in Team List
+            return `
+                <ul class="space-y-2 scrollable-card pb-4">
+                    ${teamMembers.map(m => `
+                        <li class="flex justify-between items-center p-3 bg-gray-50 rounded-lg shadow-sm">
+                            <div class="flex items-center space-x-3">
+                                <span data-lucide="user" class="w-5 h-5 text-indigo-500"></span>
+                                <div>
+                                    <p class="font-medium text-gray-900 leading-tight">${m.name || getMemberInfo(m.id, 'email')}</p>
+                                    <p class="text-xs text-gray-500">${m.designation}</p>
+                                    <p class="text-[10px] text-gray-400 break-words">ID: ${m.id}</p>
+                                </div>
+                            </div>
+                            ${m.id !== userId ? `
+                                <button onclick="handleRemoveTeamMember('${m.id}')"
+                                    class="p-1 bg-red-100 hover:bg-red-200 text-red-600 rounded-full transition duration-150" title="Remove Member">
+                                    <span data-lucide="x" class="w-4 h-4"></span>
+                                </button>
+                            ` : `
+                                <span class="text-xs font-semibold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full">YOU</span>
+                            `}
+                        </li>
+                    `).join('')}
+                </ul>
+            `;
+        };
+
+
+        // --- EVENT ATTACHMENTS ---
+
+        const attachEventListeners = () => {
+            const authForm = document.getElementById('auth-form');
+            if (authForm) {
+                authForm.onsubmit = handleAuthAction;
+            }
+
+            const toggleAuthModeButton = document.getElementById('toggle-auth-mode');
+            if (toggleAuthModeButton) {
+                toggleAuthModeButton.onclick = () => updateState({ authMode: STATE.authMode === 'login' ? 'register' : 'login', message: null });
+            }
+
+            const createCompanyForm = document.getElementById('create-company-form');
+            if (createCompanyForm) {
+                createCompanyForm.onsubmit = handleCreateCompany;
+            }
+
+            const joinCompanyForm = document.getElementById('join-company-form');
+            if (joinCompanyForm) {
+                joinCompanyForm.onsubmit = handleJoinCompany;
+            }
+
+            const newTaskForm = document.getElementById('new-task-form');
+            if (newTaskForm) {
+                newTaskForm.onsubmit = handleCreateTask;
+            }
+
+            const addMemberForm = document.getElementById('add-member-form');
+            if (addMemberForm) {
+                addMemberForm.onsubmit = handleAddTeamMember;
+            }
+            
+            // Attach event listeners for profile modal forms
+            // Note: These are now attached to buttons via onclick, but form onsubmit is more robust.
+            // Let's keep the form listeners for email/password.
+            const emailForm = document.getElementById('email-update-form');
+            if (emailForm) {
+                emailForm.onsubmit = handleEmailUpdate;
+            }
+            const passwordForm = document.getElementById('password-update-form');
+            if (passwordForm) {
+                passwordForm.onsubmit = handlePasswordUpdate;
+            }
+            
+            // Attach event listener for task edit form
+            const editTaskForm = document.getElementById('edit-task-form');
+            if (editTaskForm) {
+                editTaskForm.onsubmit = handleSaveEditTask;
+            }
+        };
+
+        // --- GLOBAL EXPORTS (Required for inline HTML event handlers) ---
+        window.updateState = updateState;
+        window.handleSignOut = handleSignOut;
+        window.handleLeaveCompany = handleLeaveCompany;
+        window.handleToggleTaskStatus = handleToggleTaskStatus;
+        window.handleDeleteTask = handleDeleteTask;
+        window.handleRemoveTeamMember = handleRemoveTeamMember;
+        window.handleProfileUpdate = handleProfileUpdate;
+        window.handleEmailUpdate = handleEmailUpdate;
+        window.handlePasswordUpdate = handlePasswordUpdate;
+        window.handleEditTask = handleEditTask; // Exported new edit function
+        window.handleSaveEditTask = handleSaveEditTask; // Exported new save edit function
+        window.handleExportCSV = handleExportCSV;
+        window.handleExportPDF = handleExportPDF;
+
+
+        // --- START APPLICATION ---
+        initializeFirebase();
+    </script>
+</body>
+</html><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HR Team Task Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Custom styles for 'Inter' font and smooth scrolling */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f7f9fb; }
+        .scrollable-card { max-height: 80vh; overflow-y: auto; }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Custom scrollbar for aesthetics */
+        .scrollable-card::-webkit-scrollbar { width: 6px; }
+        .scrollable-card::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 3px; }
+        .scrollable-card::-webkit-scrollbar-track { background: transparent; }
+
+        /* Custom status colors */
+        .status-pending { background-color: #fff7ed; color: #f97316; border: 1px solid #fed7aa; } /* Orange-500 */
+        .status-overdue { background-color: #fef2f2; color: #ef4444; border: 1px solid #fecaca; } /* Red-500 */
+        .status-completed { background-color: #f0fdf4; color: #10b981; border: 1px solid #a7f3d0; } /* Emerald-500 */
+        
+        /* Style for Compact Task Cards */
+        .compact-task-card {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            transition: all 0.2s;
+            min-height: 6rem;
+        }
+        .compact-task-card:hover {
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+        }
+        .compact-section {
+            padding-right: 1rem;
+            border-right: 1px solid #e5e7eb; /* Gray-200 */
+            min-width: 150px;
+        }
+        .compact-section:last-child {
+            border-right: none;
+            padding-right: 0;
+            min-width: unset;
+            flex-grow: 1;
+        }
+        .task-title-section {
+            flex: 2; /* Takes more space for title/description */
+            min-width: 250px;
+        }
+
+        /* Print styles for PDF export */
+        @media print {
+            body { background: white; }
+            .no-print { display: none !important; }
+            #app { padding: 0 !important; }
+            .compact-task-card { border: 1px solid #ccc !important; page-break-inside: avoid; }
+            .compact-section { border-right: 1px solid #ccc !important; }
+            .print-table { width: 100%; border-collapse: collapse; }
+            .print-table th, .print-table td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        }
+
+    </style>
+</head>
+<body class="min-h-screen antialiased">
+
+    <div id="app" class="p-4 md:p-8">
+        </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, where, addDoc, serverTimestamp, updateDoc, deleteDoc, getDoc, runTransaction, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Set Firestore debug level (recommended for development)
+        setLogLevel('Debug');
+
+        // --- CUSTOM FIREBASE CONFIGURATION (Placeholder for user's keys) ---
+        const CUSTOM_FIREBASE_CONFIG = {
+            apiKey: "AIzaSyDUaryjkppiyfgPDP_NiEZ4gYd4lsuB7ZE",
+            authDomain: "hr-task-tracker-a2f91.firebaseapp.com",
+            projectId: "hr-task-tracker-a2f91",
+            storageBucket: "hr-task-tracker-a2f91.firebasestorage.app",
+            messagingSenderId: "439481702897",
+            appId: "1:439481702897:web:bc9057d21bd2f75fbdcc50"
+        };
+        
+        // --- This section is for Canvas environment compatibility ---
+        // When deploying to your own server, these __app_id and __initial_auth_token
+        // variables won't exist, so we use your CUSTOM_FIREBASE_CONFIG.
+        
+        // Check if running in Canvas
+        const runningInCanvas = typeof __app_id !== 'undefined';
+        
+        // Use Canvas config if available, otherwise use your custom config
+        const firebaseConfig = runningInCanvas ? JSON.parse(__firebase_config) : CUSTOM_FIREBASE_CONFIG;
+        
+        // The appId is your project ID from the config
+        const appId = firebaseConfig.projectId;
+        
+        // Use Canvas auth token if available, otherwise it will be null (normal web login)
+        const initialAuthToken = runningInCanvas ? __initial_auth_token : null;
+        // --- End Canvas compatibility ---
+
+        let app, db, auth;
+        let userId = null;
+        let userEmail = null;
+        let userProfile = null; // { designation, companyId, name, phone, ... }
+        let currentCompanyId = null;
+
+        let tasks = [];
+        let teamMembers = [];
+        let unsubscribeTasks = null;
+        let unsubscribeTeam = null;
+        let unsubscribeProfile = null;
+
+        const STATE = {
+            view: 'loading', // 'loading', 'auth', 'companySetup', 'dashboard'
+            authMode: 'login', // 'login', 'register'
+            message: null,
+            loading: false,
+            // Removed newCompanyId and joinCompanyId from state to fix blinking
+            newTaskForm: {
+                title: '', description: '', deadline: '', responsibleId: '', assignerId: '',
+            },
+            newTeamMemberForm: {
+                email: '', designation: '',
+            },
+            // NEW STATE FOR PROFILE MANAGEMENT
+            showProfileModal: false,
+            profileMessage: null,
+            userProfileForm: {
+                name: '', phone: '', currentPassword: '', newEmail: '', newPassword: '',
+            },
+            // NEW STATE FOR FILTERING
+            taskFilter: 'all', // 'all', 'overdue', 'today', 'tomorrow', 'thisWeek', 'nextMonth', 'completed'
+            // NEW STATE FOR TASK EDITING
+            showEditModal: false,
+            editingTask: null, // Holds the task object being edited
+            editTaskForm: {
+                id: null, title: '', description: '', deadline: '', responsibleId: '',
+            }
+        };
+
+        const appContainer = document.getElementById('app');
+
+        // --- UTILITY FUNCTIONS ---
+
+        /** Converts Date object or string to 'YYYY-MM-DD' format */
+        const formatDate = (dateString) => {
+            if (!dateString) return 'N/A';
+            const date = new Date(dateString);
+            // Format to something clean like Oct 29, 2025
+            return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); 
+        };
+
+        /** Calculates days remaining or days overdue */
+        const getDaysDifference = (deadline) => {
+            if (!deadline) return { label: 'N/A', class: 'text-gray-500', days: 9999 };
+            const now = new Date();
+            const deadlineDate = new Date(deadline);
+            // Set time to midnight for accurate day comparison
+            now.setHours(0, 0, 0, 0);
+            deadlineDate.setHours(0, 0, 0, 0);
+
+            const diffTime = deadlineDate.getTime() - now.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays < 0) {
+                return { label: `${Math.abs(diffDays)} Day${Math.abs(diffDays) === 1 ? '' : 's'} Overdue`, class: 'text-red-500 font-bold', days: diffDays };
+            } else if (diffDays === 0) {
+                return { label: 'Due Today', class: 'text-orange-500 font-bold', days: 0 };
+            } else if (diffDays === 1) {
+                return { label: 'Due Tomorrow', class: 'text-yellow-600 font-medium', days: 1 };
+            } else {
+                return { label: `${diffDays} Day${diffDays === 1 ? '' : 's'} Remaining`, class: 'text-green-600', days: diffDays };
+            }
+        };
+
+        /** Checks if a task is overdue */
+        const isOverdue = (deadline, status) => {
+            if (!deadline || status === 'Completed') return false;
+            const now = new Date();
+            const deadlineDate = new Date(deadline);
+            return deadlineDate < now;
+        };
+        
+        /** Checks if task is due this week (today + 7 days) */
+        const isDueThisWeek = (deadline) => {
+            if (!deadline) return false;
+            const deadlineDate = new Date(deadline);
+            const now = new Date();
+            const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+            return deadlineDate >= now && deadlineDate <= sevenDaysFromNow;
+        };
+
+        /** Checks if task is due next month (30 days to 60 days from now) */
+        const isDueNextMonth = (deadline) => {
+            if (!deadline) return false;
+            const deadlineDate = new Date(deadline);
+            const now = new Date();
+            const thirtyDaysFromNow = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+            const sixtyDaysFromNow = new Date(now.getTime() + 60 * 24 * 60 * 60 * 1000);
+            return deadlineDate > thirtyDaysFromNow && deadlineDate <= sixtyDaysFromNow;
+        };
+
+
+        /** Extracts status class and label */
+        const getStatusInfo = (task) => {
+            if (task.status === 'Completed') {
+                return { class: 'status-completed', label: 'Completed', sortValue: 3 };
+            }
+            if (isOverdue(task.deadline, task.status)) {
+                return { class: 'status-overdue', label: 'Overdue', sortValue: 1 };
+            }
+            return { class: 'status-pending', label: 'Pending', sortValue: 2 };
+        };
+
+        /** Finds a user's designation or name from the teamMembers array */
+        const getMemberInfo = (uid, field = 'designation') => {
+            let member = teamMembers.find(m => m.id === uid);
+
+            if (!member) {
+                 member = teamMembers.find(m => m.email === uid);
+            }
+            
+            if (field === 'designation') {
+                return member?.designation || 'Unknown';
+            }
+            if (field === 'email') {
+                const email = member?.email;
+                return email ? email.split('@')[0] : 'Unknown User ID';
+            }
+            // FIX 1: Display Name if available, otherwise fallback to email username
+            if (field === 'name') {
+                // Check public team name first, then userProfile name, then email username
+                return member?.name || userProfile?.name || getMemberInfo(uid, 'email');
+            }
+            if (field === 'phone') {
+                return member?.phone || 'N/A';
+            }
+            return 'N/A';
+        };
+
+        // --- FIREBASE PATHS ---
+
+        const getProfilePath = (uid) => `artifacts/${appId}/users/${uid}/profile/data`;
+        const getCompanyDocPath = (companyId) => `artifacts/${appId}/public/data/companies/${companyId}`;
+        const getTasksCollectionRef = (companyId) => collection(db, getCompanyDocPath(companyId), 'tasks');
+        const getTeamCollectionRef = (companyId) => collection(db, getCompanyDocPath(companyId), 'team');
+
+        // --- FIREBASE INITIALIZATION AND AUTH ---
+
+        const initializeFirebase = async () => {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // This handles both Canvas (with token) and self-hosted (no token)
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                }
+                // If no token, onAuthStateChanged will just wait for user login.
+
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        userEmail = user.email;
+                        startProfileListener(userId);
+                    } else {
+                        // If not in Canvas and not logged in, show auth screen
+                        if (!runningInCanvas) {
+                            userId = null;
+                            userEmail = null;
+                            updateState({ view: 'auth', loading: false });
+                            stopAllListeners();
+                        }
+                        // If in Canvas, it should auto-login with token. 
+                        // If it fails, it will just show loading.
+                    }
+                });
+
+            } catch (error) {
+                console.error("Firebase Initialization Error:", error);
+                updateState({ view: 'auth', message: `Initialization failed: ${error.message}`, loading: false });
+            }
+        };
+
+        // --- REAL-TIME DATA LISTENERS ---
+
+        const stopAllListeners = () => {
+            if (unsubscribeProfile) unsubscribeProfile();
+            if (unsubscribeTasks) unsubscribeTasks();
+            if (unsubscribeTeam) unsubscribeTeam();
+            unsubscribeProfile = null;
+            unsubscribeTasks = null;
+            unsubscribeTeam = null;
+        };
+
+        const startProfileListener = (uid) => {
+            stopAllListeners();
+            const profileDocRef = doc(db, getProfilePath(uid));
+
+            unsubscribeProfile = onSnapshot(profileDocRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    userProfile = docSnap.data();
+                    currentCompanyId = userProfile.companyId;
+
+                    // Initialize editable profile form state
+                    STATE.userProfileForm.name = userProfile.name || getMemberInfo(uid, 'email');
+                    STATE.userProfileForm.phone = userProfile.phone || '';
+
+                    if (currentCompanyId) {
+                        if (teamMembers.length > 0 && !STATE.newTaskForm.responsibleId) {
+                            STATE.newTaskForm.responsibleId = teamMembers[0].id;
+                        }
+
+                        updateState({ view: 'dashboard', loading: false });
+                        startDataListeners(currentCompanyId);
+                    } else {
+                        updateState({ view: 'companySetup', loading: false });
+                    }
+                } else {
+                    userProfile = null;
+                    currentCompanyId = null;
+                    console.warn(`Profile document missing for user ${uid}. Redirecting to setup.`);
+                    updateState({ view: 'companySetup', loading: false });
+                }
+            }, (error) => {
+                console.error("Error listening to profile:", error);
+                updateState({ view: 'companySetup', message: `Profile data error. Please check company link.`, loading: false });
+            });
+        };
+
+        const startDataListeners = (companyId) => {
+            // 1. Task Listener
+            if (unsubscribeTasks) unsubscribeTasks();
+            const tasksQ = query(getTasksCollectionRef(companyId));
+            unsubscribeTasks = onSnapshot(tasksQ, (snapshot) => {
+                tasks = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                render();
+            }, (error) => {
+                console.error("Error listening to tasks:", error);
+            });
+
+            // 2. Team Listener
+            if (unsubscribeTeam) unsubscribeTeam();
+            const teamQ = query(getTeamCollectionRef(companyId));
+            unsubscribeTeam = onSnapshot(teamQ, (snapshot) => {
+                teamMembers = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+                
+                if (teamMembers.length > 0 && !STATE.newTaskForm.responsibleId) {
+                    STATE.newTaskForm.responsibleId = teamMembers[0].id;
+                }
+
+                render();
+            }, (error) => {
+                console.error("Error listening to team:", error);
+            });
+        };
+
+        // --- WHATSAPP / NOTIFICATION HANDLER (Backend Design) ---
+        const sendWhatsappNotification = (task, recipientPhone, type) => {
+            // NOTE: Direct WhatsApp API integration requires a server/backend.
+            // This function simulates the API call and logs the data required to send the message.
+            if (!recipientPhone || recipientPhone === 'N/A') {
+                console.warn(`[WHATSAPP SKIPPED] No phone number for user: ${getMemberInfo(task.responsibleId, 'name')}`);
+                return;
+            }
+
+            const messageMap = {
+                'created': `📢 NEW TASK ASSIGNED:\n*${task.title}* is due on ${formatDate(task.deadline)}. Check your TaskFlow Dashboard!`,
+                'updated': `📝 TASK UPDATED: *${task.title}* has been modified. New deadline: ${formatDate(task.deadline)}.`,
+                'status': `✅ TASK STATUS: *${task.title}* is now ${task.status}.`,
+                'reminder': `⚠️ DUE REMINDER: *${task.title}* is due soon! Deadline: ${formatDate(task.deadline)}.`,
+            };
+
+            const message = messageMap[type] || messageMap['created'];
+
+            // --- PRODUCTION INTEGRATION POINT ---
+            console.log(`--- [WHATSAPP API CALL SIMULATED] ---`);
+            console.log(`TO: ${recipientPhone}`);
+            console.log(`TYPE: ${type}`);
+            console.log(`MESSAGE: ${message}`);
+            // --- END INTEGRATION POINT ---
+        };
+        
+        // --- PROFILE HANDLERS (Unchanged logic) ---
+        
+        const handleProfileUpdate = async () => {
+            const { name, phone } = STATE.userProfileForm;
+            if (!name) {
+                updateState({ profileMessage: 'Name is required.', loading: false });
+                return;
+            }
+
+            updateState({ loading: true, profileMessage: null });
+            const profileDocRef = doc(db, getProfilePath(userId));
+            const teamDocRef = doc(getTeamCollectionRef(currentCompanyId), userId);
+
+            try {
+                // Update private profile and public team entry simultaneously
+                await setDoc(profileDocRef, { name, phone }, { merge: true });
+                await updateDoc(teamDocRef, { name, phone }); 
+                
+                // Also update user profile state immediately
+                userProfile.name = name;
+                userProfile.phone = phone;
+
+                updateState({ loading: false, profileMessage: 'Details updated successfully!', showProfileModal: false });
+            } catch (error) {
+                console.error("Profile Update Error:", error);
+                updateState({ loading: false, profileMessage: `Failed to update details: ${error.message}` });
+            }
+        };
+        
+        const handleEmailUpdate = async (e) => {
+            e.preventDefault();
+            const { currentPassword, newEmail } = STATE.userProfileForm;
+            if (!currentPassword || !newEmail || newEmail === userEmail) {
+                updateState({ profileMessage: 'Please provide current password and a new, different email.', loading: false });
+                return;
+            }
+
+            updateState({ loading: true, profileMessage: null });
+            const user = auth.currentUser;
+            const credential = EmailAuthProvider.credential(userEmail, currentPassword);
+            
+            try {
+                await reauthenticateWithCredential(user, credential);
+                await updateEmail(user, newEmail);
+                
+                // Update Firestore team entry
+                const teamDocRef = doc(getTeamCollectionRef(currentCompanyId), userId);
+                await updateDoc(teamDocRef, { email: newEmail });
+                
+                userEmail = newEmail; // Update local state email
+                updateState({ loading: false, profileMessage: 'Email updated successfully! Please log in again.', showProfileModal: false });
+                handleSignOut(); // Force re-login with new email
+                
+            } catch (error) {
+                console.error("Email Update Error:", error);
+                updateState({ loading: false, profileMessage: `Email update failed: ${error.message}` });
+            }
+        };
+
+        const handlePasswordUpdate = async (e) => {
+            e.preventDefault();
+            const { currentPassword, newPassword } = STATE.userProfileForm;
+            if (!currentPassword || !newPassword || newPassword.length < 6) {
+                updateState({ profileMessage: 'New password must be at least 6 characters.', loading: false });
+                return;
+            }
+
+            updateState({ loading: true, profileMessage: null });
+            const user = auth.currentUser;
+            const credential = EmailAuthProvider.credential(userEmail, currentPassword);
+
+            try {
+                await reauthenticateWithCredential(user, credential);
+                await updatePassword(user, newPassword);
+
+                updateState({ loading: false, profileMessage: 'Password updated successfully!', showProfileModal: false });
+            } catch (error) {
+                console.error("Password Update Error:", error);
+                updateState({ loading: false, profileMessage: `Password update failed: ${error.message}` });
+            }
+        };
+
+        // --- AUTH HANDLERS (Unchanged logic) ---
+
+        const handleAuthAction = async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const email = form.email.value;
+            const password = form.password.value;
+            updateState({ loading: true, message: null });
+
+            try {
+                if (STATE.authMode === 'register') {
+                    await createUserWithEmailAndPassword(auth, email, password);
+                } else {
+                    await signInWithEmailAndPassword(auth, email, password);
+                }
+                // onAuthStateChanged will handle the redirect
+            } catch (error) {
+                console.error("Auth Error:", error);
+                const msg = error.code.includes('auth') ? error.message : 'An unknown error occurred during authentication.';
+                updateState({ message: msg, loading: false });
+            }
+        };
+
+        const handleSignOut = async () => {
+            try {
+                await signOut(auth);
+                // onAuthStateChanged will catch this and redirect to 'auth' view
+            } catch (error) {
+                console.error("Sign Out Error:", error);
+                updateState({ message: 'Failed to sign out.', loading: false });
+            }
+        };
+
+        // --- COMPANY HANDLERS ---
+
+        const handleCreateCompany = async (e) => {
+            e.preventDefault();
+            updateState({ loading: true, message: null });
+            // Read value directly from form
+            const companyId = e.target.newCompanyId.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+
+            if (!companyId) {
+                updateState({ message: 'Company ID cannot be empty.', loading: false });
+                return;
+            }
+
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const companyDocRef = doc(db, getCompanyDocPath(companyId));
+                    const companyDoc = await transaction.get(companyDocRef);
+
+                    if (companyDoc.exists()) {
+                        throw new Error("Company ID already taken. Please try a different one.");
+                    }
+
+                    // 1. Create Company Document (Public)
+                    transaction.set(companyDocRef, {
+                        name: companyId,
+                        ownerId: userId,
+                        createdAt: serverTimestamp(),
+                    });
+
+                    // 2. Add Current User as Team Member (Public Subcollection)
+                    const teamDocRef = doc(getTeamCollectionRef(companyId), userId); 
+                    transaction.set(teamDocRef, {
+                        email: userEmail,
+                        designation: 'HR Manager/Administrator', // <-- FIX HERE
+                        joinedAt: serverTimestamp(),
+                        name: userEmail.split('@')[0], // Default name
+                        phone: ''
+                    });
+
+                    // 3. Update User Profile with Company ID (Private)
+                    const profileDocRef = doc(db, getProfilePath(userId));
+                    transaction.set(profileDocRef, {
+                        email: userEmail,
+                        designation: 'HR Manager/Administrator', // <-- FIX HERE
+                        companyId: companyId,
+                        createdAt: serverTimestamp(),
+                        name: userEmail.split('@')[0], // Default name
+                        phone: ''
+                    });
+                });
+                // onSnapshot will handle the view change
+            } catch (error) {
+                console.error("Company Creation Error:", error);
+                updateState({ message: error.message, loading: false });
+            }
+        };
+
+        const handleJoinCompany = async (e) => {
+            e.preventDefault();
+            updateState({ loading: true, message: null });
+            // Read value directly from form
+            const companyId = e.target.joinCompanyId.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, ''); 
+
+            if (!companyId) {
+                updateState({ message: 'Company ID cannot be empty.', loading: false });
+                return;
+            }
+
+            try {
+                const companyDocRef = doc(db, getCompanyDocPath(companyId));
+                const companyDoc = await getDoc(companyDocRef);
+
+                if (!companyDoc.exists()) {
+                    throw new Error("Company not found. Please check the ID.");
+                }
+
+                const teamDocRefByUID = doc(getTeamCollectionRef(companyId), userId);
+                let teamDoc = await getDoc(teamDocRefByUID);
+
+                if (!teamDoc.exists()) {
+                    // Try finding by email (for users added but not yet joined)
+                    const teamDocRefByEmail = doc(getTeamCollectionRef(companyId), userEmail); 
+                    teamDoc = await getDoc(teamDocRefByEmail);
+
+                    if (!teamDoc.exists()) {
+                        throw new Error("You are not yet registered as a team member in this company. Please ask your HR/Admin to add your email.");
+                    }
+                    
+                    // User found by email, "promote" them to UID key
+                    const newTeamDocRef = doc(getTeamCollectionRef(companyId), userId);
+                    await setDoc(newTeamDocRef, teamDoc.data());
+                    await deleteDoc(teamDocRefByEmail); // Clean up old email key
+                    
+                    teamDoc = await getDoc(newTeamDocRef); // Get the new doc
+                }
+                
+                // User is in the team, now update their private profile
+                const profileDocRef = doc(db, getProfilePath(userId));
+                await setDoc(profileDocRef, {
+                    email: userEmail,
+                    designation: teamDoc.data().designation,
+                    companyId: companyId,
+                    createdAt: serverTimestamp(),
+                    name: teamDoc.data().name || userEmail.split('@')[0],
+                    phone: teamDoc.data().phone || ''
+                }, { merge: true });
+
+                // onSnapshot will handle the view change
+
+            } catch (error) {
+                console.error("Company Join Error:", error);
+                updateState({ message: error.message, loading: false });
+            }
+        };
+
+        // --- TASK HANDLERS ---
+        
+        // NEW: Handles launching the edit modal
+        const handleEditTask = (taskId) => {
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            const isAdmin = userProfile?.designation === 'HR Manager/Administrator'; // <-- FIX HERE
+            const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
+            
+            // FIX 1: Admin and Assistant Admin can edit tasks
+            if (!isAdmin && !isAssistantAdmin) {
+                updateState({ message: 'Permission Denied: Only Administrators can edit tasks.', loading: false });
+                return;
+            }
+            
+            // Clear message/loading before opening modal
+            updateState({ message: null, loading: false });
+
+            updateState({
+                showEditModal: true,
+                editingTask: task,
+                editTaskForm: {
+                    id: task.id,
+                    title: task.title,
+                    description: task.description,
+                    // Ensure date input is correctly formatted (YYYY-MM-DD)
+                    deadline: task.deadline ? new Date(task.deadline).toISOString().substring(0, 10) : '',
+                    responsibleId: task.responsibleId,
+                }
+            });
+        };
+
+        // NEW: Handles saving the edited task
+        const handleSaveEditTask = async (e) => {
+            e.preventDefault();
+            const form = STATE.editTaskForm;
+            updateState({ loading: true, message: null });
+
+            if (!form.title || !form.deadline || !form.responsibleId || form.responsibleId.length < 5) { 
+                updateState({ message: 'Title, Responsible User ID, and Deadline are required.', loading: false });
+                return;
+            }
+
+            try {
+                const taskDocRef = doc(getTasksCollectionRef(currentCompanyId), form.id);
+                await updateDoc(taskDocRef, {
+                    title: form.title,
+                    description: form.description,
+                    responsibleId: form.responsibleId,
+                    deadline: form.deadline,
+                });
+                
+                // Get recipient phone number for notification
+                const recipient = teamMembers.find(m => m.id === form.responsibleId);
+                sendWhatsappNotification(form, recipient ? recipient.phone : null, 'updated');
+
+                updateState({
+                    loading: false,
+                    message: 'Task updated successfully!',
+                    showEditModal: false,
+                    editingTask: null,
+                });
+            } catch (error) {
+                console.error("Task Update Error:", error);
+                updateState({ message: 'Failed to update task.', loading: false });
+            }
+        };
+
+
+        const handleCreateTask = async (e) => {
+            e.preventDefault();
+            const form = STATE.newTaskForm;
+            updateState({ loading: true, message: null });
+
+            if (!form.title || !form.deadline || !form.responsibleId || form.responsibleId.length < 5) { 
+                updateState({ message: 'Title, Responsible User ID, and Deadline are required.', loading: false });
+                return;
+            }
+
+            try {
+                const newTaskRef = await addDoc(getTasksCollectionRef(currentCompanyId), {
+                    title: form.title,
+                    description: form.description,
+                    responsibleId: form.responsibleId,
+                    assignerId: userId,
+                    deadline: form.deadline,
+                    status: 'Pending',
+                    createdAt: serverTimestamp(),
+                });
+                
+                // Get recipient phone number for notification
+                const recipient = teamMembers.find(m => m.id === form.responsibleId);
+                sendWhatsappNotification({ id: newTaskRef.id, ...form }, recipient ? recipient.phone : null, 'created');
+
+                updateState({
+                    loading: false,
+                    message: 'Task created successfully!',
+                    newTaskForm: { 
+                        title: '', 
+                        description: '', 
+                        deadline: '', 
+                        responsibleId: teamMembers.length > 0 ? teamMembers[0].id : '', 
+                        assignerId: userId 
+                    }
+                });
+
+            } catch (error) {
+                console.error("Task Creation Error:", error);
+                updateState({ message: 'Failed to create task.', loading: false });
+            }
+        };
+
+        const handleToggleTaskStatus = async (taskId, currentStatus) => {
+            // Define roles
+            const isAdmin = userProfile?.designation === 'HR Manager/Administrator'; // <-- FIX HERE
+            const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
+            
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            // Permission check: Must be responsible OR Admin/Assistant Admin
+            if (task.responsibleId !== userId && !isAdmin && !isAssistantAdmin) {
+                updateState({ message: 'Error: You can only complete tasks assigned to you.', loading: false });
+                return;
+            }
+
+            updateState({ loading: true, message: null });
+            const newStatus = currentStatus === 'Completed' ? 'Pending' : 'Completed';
+            const taskDocRef = doc(getTasksCollectionRef(currentCompanyId), taskId);
+
+            try {
+                await updateDoc(taskDocRef, { status: newStatus });
+                
+                // Send notification on status change
+                const recipient = teamMembers.find(m => m.id === task.responsibleId);
+                sendWhatsappNotification(task, recipient ? recipient.phone : null, 'status');
+
+                updateState({ loading: false, message: `Task status updated to ${newStatus}.` });
+            } catch (error) {
+                console.error("Task Update Error:", error);
+                updateState({ message: 'Failed to update task status.', loading: false });
+            }
+        };
+
+        const handleDeleteTask = async (taskId) => {
+            // Deletion is restricted to the main HR Manager / Administrator only.
+            const isAdmin = userProfile?.designation === 'HR Manager/Administrator'; // <-- FIX HERE
+            if (!isAdmin) {
+                // Use a non-blocking message instead of alert
+                updateState({ message: "Permission Denied: Only the main HR Manager/Administrator can delete tasks.", loading: false });
+                return;
+            }
+
+            // Use a custom modal for confirmation eventually, for now, 'confirm' is a placeholder.
+            // On a live site, 'confirm' might be blocked. A custom modal is better.
+            // For now, we'll assume 'confirm' works for simplicity, but it's bad practice.
+            // A better way: updateState({ showConfirmModal: true, confirmAction: () => doDelete(taskId) })
+            if (!confirm("Are you sure you want to delete this task? This cannot be undone.")) return;
+            
+            updateState({ loading: true, message: null });
+            const taskDocRef = doc(getTasksCollectionRef(currentCompanyId), taskId);
+            try {
+                await deleteDoc(taskDocRef);
+                updateState({ loading: false, message: 'Task deleted successfully.' });
+            } catch (error) {
+                console.error("Task Delete Error:", error);
+                updateState({ message: 'Failed to delete task.', loading: false });
+            }
+        };
+
+        // --- EXPORT HANDLERS (Unchanged logic) ---
+        
+        const handleExportCSV = () => {
+            const headers = ['ID', 'Title', 'Description', 'Responsible', 'Deadline', 'Status', 'Assigned By', 'Date Assigned'];
+            
+            const rows = tasks.map(t => {
+                const responsibleName = getMemberInfo(t.responsibleId, 'name');
+                const assignerName = getMemberInfo(t.assignerId, 'name');
+                const dateAssigned = t.createdAt ? formatDate(t.createdAt.toDate()) : 'N/A';
+
+                return [
+                    t.id,
+                    `"${t.title.replace(/"/g, '""')}"`,
+                    `"${t.description ? t.description.replace(/"/g, '""') : ''}"`,
+                    responsibleName,
+                    formatDate(t.deadline),
+                    t.status,
+                    assignerName,
+                    dateAssigned
+                ].join(',');
+            });
+
+            const csvContent = [headers.join(','), ...rows].join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `TaskFlow_Export_${currentCompanyId}_${new Date().toISOString().substring(0, 10)}.csv`;
+            link.click();
+
+            updateState({ message: 'CSV file downloaded successfully!', loading: false });
+        };
+
+        const handleExportPDF = () => {
+            // This function uses window.print() which prints the *current* view.
+            // We'll add print-specific styles to hide UI elements.
+            window.print();
+            updateState({ message: 'Print dialog opened.', loading: false });
+        };
+
+        // --- TEAM HANDLERS (Unchanged logic) ---
+
+        const handleAddTeamMember = async (e) => {
+            e.preventDefault();
+            const form = STATE.newTeamMemberForm;
+            updateState({ loading: true, message: null });
+            
+            // Permission check for Add Team Member
+            const isAdmin = userProfile?.designation === 'HR Manager/Administrator'; // <-- FIX HERE
+            const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
+            if (!isAdmin && !isAssistantAdmin) {
+                updateState({ message: 'Permission Denied: Only Administrators can add team members.', loading: false });
+                return;
+            }
+
+            if (!form.email || !form.designation) {
+                updateState({ message: 'Email and Designation are required.', loading: false });
+                return;
+            }
+
+            // The ID for a new member is their email, until they log in.
+            const newUserId = form.email.trim();
+
+            try {
+                const teamDocRef = doc(getTeamCollectionRef(currentCompanyId), newUserId);
+                
+                // Check if user (by email) already exists
+                const docSnap = await getDoc(teamDocRef);
+                if (docSnap.exists()) {
+                    throw new Error("A user with this email already exists in the team.");
+                }
+
+                await setDoc(teamDocRef, {
+                    email: form.email.trim(),
+                    designation: form.designation.trim(),
+                    joinedAt: serverTimestamp(),
+                    name: form.email.split('@')[0], // Default name
+                    phone: '',
+                });
+
+                updateState({
+                    loading: false,
+                    message: `Team member ${form.email} added. They can now register and join using company ID: ${currentCompanyId}.`,
+                    newTeamMemberForm: { email: '', designation: '' }
+                });
+
+            } catch (error) {
+                console.error("Add Team Member Error:", error);
+                updateState({ message: error.message || 'Failed to add team member.', loading: false });
+            }
+        };
+
+        const handleRemoveTeamMember = async (memberId) => {
+            // Removal is restricted to the main HR Manager / Administrator only.
+            const isAdmin = userProfile?.designation === 'HR Manager/Administrator'; // <-- FIX HERE
+            if (!isAdmin) {
+                updateState({ message: "Permission Denied: Only the main HR Manager/Administrator can remove team members.", loading: false });
+                return;
+            }
+
+            if (memberId === userId) {
+                updateState({ message: "You cannot remove yourself. Please use the 'Leave Company' button.", loading: false });
+                return;
+            }
+            if (!confirm(`Are you sure you want to remove this team member? This cannot be undone.`)) return;
+
+            updateState({ loading: true, message: null });
+            const teamDocRef = doc(getTeamCollectionRef(currentCompanyId), memberId);
+
+            try {
+                await deleteDoc(teamDocRef);
+                updateState({ loading: false, message: 'Team member removed successfully.' });
+            } catch (error) {
+                console.error("Team Member Delete Error:", error);
+                updateState({ message: 'Failed to remove team member.', loading: false });
+            }
+        };
+
+        const handleLeaveCompany = async () => {
+            if (!confirm(`Are you sure you want to unlink from company ${currentCompanyId}? You will need to be re-added by an admin to rejoin.`)) return;
+
+            updateState({ loading: true, message: null });
+            const profileDocRef = doc(db, getProfilePath(userId));
+
+            try {
+                // We just remove the companyId from their private profile.
+                // We DON'T delete their team entry, so an admin can see they were part of the team.
+                // An admin would have to manually remove them from the team list.
+                await updateDoc(profileDocRef, { companyId: null });
+                // onSnapshot will handle the view change
+            } catch (error) {
+                console.error("Leave Company Error:", error);
+                updateState({ message: 'Failed to leave company.', loading: false });
+            }
+        };
+
+
+        // --- STATE AND RENDERING ---
+
+        const updateState = (newState) => {
+            // isFormChange is used to determine if we should SKIP rendering for smooth typing.
+            const isFormChange = newState.hasOwnProperty('newTaskForm') || newState.hasOwnProperty('newTeamMemberForm') || 
+                                 newState.hasOwnProperty('userProfileForm') || newState.hasOwnProperty('editTaskForm');
+            
+            Object.keys(newState).forEach(key => {
+                if (key === 'newTaskForm' || key === 'newTeamMemberForm' || key === 'userProfileForm' || key === 'editTaskForm') {
+                    STATE[key] = { ...STATE[key], ...newState[key] };
+                } else {
+                    STATE[key] = newState[key];
+                }
+            });
+            
+            // Only render if it's NOT a form input change OR if there is a message/loading status change OR if the view/modal is changing.
+            if (!isFormChange || newState.message || newState.loading !== undefined || STATE.view !== 'dashboard' || newState.showProfileModal !== undefined || newState.taskFilter !== undefined || newState.showEditModal !== undefined) {
+                 render();
+            }
+        };
+
+        const render = () => {
+            let html = '';
+
+            // Render message/loading bar
+            const messageClass = STATE.message && STATE.message.includes('success') ? 'bg-emerald-100 text-emerald-800' :
+                                 STATE.message ? 'bg-red-100 text-red-800' :
+                                 'bg-blue-100 text-blue-800';
+            const showBar = STATE.loading || STATE.message;
+            
+            html += `
+                <div class="fixed top-0 left-0 right-0 p-3 text-center ${messageClass} z-50 shadow-md transition-all duration-300 no-print ${showBar ? 'translate-y-0' : '-translate-y-full'}">
+                    ${STATE.loading ? '<span class="inline-block animate-spin mr-2" data-lucide="loader"></span> Loading...' : ''}
+                    ${STATE.message ? STATE.message : ''}
+                </div>
+            `;
+            
+            // Clear message after a few seconds
+            if(STATE.message) {
+                setTimeout(() => updateState({ message: null }), 3000);
+            }
+
+
+            switch (STATE.view) {
+                case 'loading':
+                    html += renderLoading();
+                    break;
+                case 'auth':
+                    html += renderAuth();
+                    break;
+                case 'companySetup':
+                    html += renderCompanySetup();
+                    break;
+                case 'dashboard':
+                    html += renderDashboard();
+                    break;
+            }
+            
+            // Render Modals if requested
+            if (STATE.showProfileModal) {
+                html += renderProfileModal();
+            }
+            if (STATE.showEditModal) {
+                html += renderEditTaskModal();
+            }
+
+            appContainer.innerHTML = html;
+            lucide.createIcons();
+            attachEventListeners();
+        };
+
+        // --- RENDER FUNCTIONS ---
+        
+        const renderEditTaskModal = () => {
+            const task = STATE.editingTask;
+            if (!task) return '';
+            
+            // Get task deadline in YYYY-MM-DD format for input default value
+            const taskDeadline = STATE.editTaskForm.deadline;
+
+            return `
+                <div class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 fade-in no-print" onclick="updateState({ showEditModal: false, editingTask: null, message: null })">
+                    <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg mx-4" onclick="event.stopPropagation()">
+                        <div class="flex justify-between items-center border-b pb-3 mb-4">
+                            <h2 class="text-2xl font-bold text-gray-800 flex items-center"><span data-lucide="edit" class="w-6 h-6 mr-2 text-green-600"></span>Edit Task: ${task.title}</h2>
+                            <button onclick="updateState({ showEditModal: false, editingTask: null, message: null })" class="text-gray-400 hover:text-gray-600">
+                                <span data-lucide="x" class="w-6 h-6"></span>
+                            </button>
+                        </div>
+                        
+                        ${STATE.message ? `<div class="p-3 mb-4 text-sm rounded-lg ${STATE.message.includes('success') ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}">${STATE.message}</div>` : ''}
+
+                        <form id="edit-task-form" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Task Title</label>
+                                <input type="text" value="${STATE.editTaskForm.title}" required
+                                    oninput="updateState({ editTaskForm: { title: this.value } })"
+                                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Description</label>
+                                <textarea oninput="updateState({ editTaskForm: { description: this.value } })"
+                                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">${STATE.editTaskForm.description}</textarea>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Deadline</label>
+                                    <input type="date" value="${taskDeadline}" required
+                                        onchange="updateState({ editTaskForm: { deadline: this.value } })"
+                                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Responsible User</label>
+                                    <select required onchange="updateState({ editTaskForm: { responsibleId: this.value } })" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+                                        ${teamMembers.map(m => `
+                                            <option value="${m.id}" ${STATE.editTaskForm.responsibleId === m.id ? 'selected' : ''}>
+                                                ${getMemberInfo(m.id, 'name')} (${getMemberInfo(m.id, 'designation')})
+                                            </option>
+                                        `).join('')}
+                                    </select>
+                                </div>
+                            </div>
+                            <button type="submit" class="w-full py-3 bg-indigo-600 text-white text-base font-medium rounded-lg shadow hover:bg-indigo-700 transition" ${STATE.loading ? 'disabled' : ''}>
+                                ${STATE.loading ? 'Saving...' : 'Save Changes'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            `;
+        };
+        
+        const renderProfileModal = () => `
+            <div class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 fade-in no-print" onclick="updateState({ showProfileModal: false })">
+                <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg mx-4" onclick="event.stopPropagation()">
+                    <div class="flex justify-between items-center border-b pb-3 mb-4">
+                        <h2 class="text-2xl font-bold text-gray-800 flex items-center"><span data-lucide="user-cog" class="w-6 h-6 mr-2 text-indigo-600"></span>My Profile Settings</h2>
+                        <button onclick="updateState({ showProfileModal: false, profileMessage: null })" class="text-gray-400 hover:text-gray-600">
+                            <span data-lucide="x" class="w-6 h-6"></span>
+                        </button>
+                    </div>
+
+                    ${STATE.profileMessage ? `<div class="p-3 mb-4 text-sm rounded-lg ${STATE.profileMessage.includes('success') ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}">${STATE.profileMessage}</div>` : ''}
+
+                    <div class="space-y-6 scrollable-card p-2">
+                        <div class="bg-gray-50 p-4 rounded-lg">
+                            <p class="font-medium text-lg text-indigo-600">${userEmail}</p>
+                            <p class="text-sm text-gray-500">${userProfile?.designation || 'Team Member'}</p>
+                            <p class="text-sm text-gray-700 mt-1">Name: ${userProfile?.name || 'Not Set'}</p>
+                            <p class="text-sm text-gray-700">Phone: ${userProfile?.phone || 'Not Set'}</p>
+                        </div>
+                        
+                        <div>
+                            <h3 class="text-lg font-semibold text-gray-700 mb-3">Update Contact Details</h3>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Full Name</label>
+                                    <input type="text" value="${STATE.userProfileForm.name}" oninput="updateState({ userProfileForm: { name: this.value } })" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Phone Number (Required for WhatsApp)</label>
+                                    <input type="text" value="${STATE.userProfileForm.phone}" oninput="updateState({ userProfileForm: { phone: this.value } })" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg">
+                                </div>
+                                <button onclick="handleProfileUpdate()" class="w-full py-2 bg-green-600 text-white text-sm font-medium rounded-lg shadow hover:bg-green-700 transition">Save Details</button>
+                            </div>
+                        </div>
+
+                        <hr class="border-gray-200">
+
+                        <form onsubmit="handleEmailUpdate(event)" id="email-update-form" class="space-y-3">
+                            <h3 class="text-lg font-semibold text-gray-700 mb-3">Change Email Address</h3>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">New Email</label>
+                                <input type="email" name="newEmail" value="${STATE.userProfileForm.newEmail}" oninput="updateState({ userProfileForm: { newEmail: this.value } })" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Current Password (Required)</label>
+                                <input type="password" name="currentPassword" value="${STATE.userProfileForm.currentPassword}" oninput="updateState({ userProfileForm: { currentPassword: this.value } })" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg">
+                            </div>
+                            <button type="submit" class="w-full py-2 bg-yellow-600 text-white text-sm font-medium rounded-lg shadow hover:bg-yellow-700 transition">Update Email</button>
+                        </form>
+
+                        <hr class="border-gray-200">
+
+                        <form onsubmit="handlePasswordUpdate(event)" id="password-update-form" class="space-y-3">
+                            <h3 class="text-lg font-semibold text-gray-700 mb-3">Change Password</h3>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">New Password (Min 6 Chars)</label>
+                                <input type="password" name="newPassword" value="${STATE.userProfileForm.newPassword}" oninput="updateState({ userProfileForm: { newPassword: this.value } })" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Current Password (Required)</label>
+                                <input type="password" name="currentPassword" value="${STATE.userProfileForm.currentPassword}" oninput="updateState({ userProfileForm: { currentPassword: this.value } })" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg">
+                            </div>
+                            <button type="submit" class="w-full py-2 bg-red-600 text-white text-sm font-medium rounded-lg shadow hover:bg-red-700 transition">Update Password</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        `;
+
+
+        const renderLoading = () => `
+            <div class="flex items-center justify-center min-h-[500px] text-gray-500">
+                <span class="animate-spin w-8 h-8 mr-3" data-lucide="loader-circle"></span>
+                <p>Establishing connection and verifying session...</p>
+            </div>
+        `;
+
+        const renderAuth = () => `
+            <div class="max-w-md mx-auto my-16 bg-white p-8 rounded-xl shadow-2xl fade-in">
+                <div class="flex justify-between items-center mb-6 border-b pb-4">
+                    <h1 class="text-3xl font-bold text-gray-800">${STATE.authMode === 'login' ? 'Team Login' : 'Create Account'}</h1>
+                    <span data-lucide="briefcase" class="w-8 h-8 text-indigo-600"></span>
+                </div>
+                <form id="auth-form" class="space-y-4">
+                    <div>
+                        <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
+                        <input type="email" id="email" name="email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <div>
+                        <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                        <input type="password" id="password" name="password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                    </div>
+                    <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out" ${STATE.loading ? 'disabled' : ''}>
+                        ${STATE.loading ? '...' : (STATE.authMode === 'login' ? 'Sign In' : 'Register')}
+                    </button>
+                </form>
+                <div class="mt-6 text-center">
+                    <button class="text-sm text-indigo-600 hover:text-indigo-800 transition duration-150 ease-in-out" id="toggle-auth-mode">
+                        ${STATE.authMode === 'login' ? 'Need an account? Register here.' : 'Already have an account? Sign In.'}
+                    </button>
+                </div>
+            </div>
+        `;
+
+        const renderCompanySetup = () => `
+            <div class="max-w-2xl mx-auto my-16 bg-white p-8 rounded-xl shadow-2xl fade-in">
+                <h1 class="text-3xl font-bold text-gray-800 mb-6 border-b pb-4">Welcome, ${userEmail || 'Team Member'}!</h1>
+
+                <div class="space-y-8">
+                    <div class="border p-6 rounded-xl shadow-lg bg-indigo-50/50">
+                        <h2 class="text-xl font-semibold text-indigo-700 flex items-center mb-4"><span data-lucide="factory" class="w-5 h-5 mr-2"></span>Create a New Company</h2>
+                        <form id="create-company-form" class="space-y-4">
+                            <div>
+                                <label for="newCompanyId" class="block text-sm font-medium text-gray-700">Choose a unique Company ID (e.g., awesome-hr-corp)</label>
+                                <input type="text" id="newCompanyId" name="newCompanyId" required
+                                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                            </div>
+                            <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-lg text-sm font-medium text-white bg-green-600 hover:bg-green-700 transition duration-150 ease-in-out" ${STATE.loading ? 'disabled' : ''}>
+                                ${STATE.loading ? 'Creating...' : 'Create Company and Become Admin'}
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="text-center font-bold text-gray-500">OR</div>
+
+                    <div class="border p-6 rounded-xl shadow-lg bg-white">
+                        <h2 class="text-xl font-semibold text-gray-700 flex items-center mb-4"><span data-lucide="users" class="w-5 h-5 mr-2"></span>Join an Existing Company</h2>
+                        <p class="text-sm text-gray-500 mb-4">Ask your HR/Admin for your Company ID.</p>
+                        <form id="join-company-form" class="space-y-4">
+                            <div>
+                                <label for="joinCompanyId" class="block text-sm font-medium text-gray-700">Company ID</label>
+                                <input type="text" id="joinCompanyId" name="joinCompanyId" required
+                                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                            </div>
+                            <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition duration-150 ease-in-out" ${STATE.loading ? 'disabled' : ''}>
+                                ${STATE.loading ? 'Joining...' : 'Join Company'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="mt-8 text-center">
+                    <button class="text-sm text-gray-600 hover:text-red-800 transition duration-150 ease-in-out" onclick="handleSignOut()" ${STATE.loading ? 'disabled' : ''}>
+                        Sign Out
+                    </button>
+                </div>
+            </div>
+        `;
+
+        const renderDashboard = () => {
+            const isAdmin = userProfile?.designation === 'HR Manager/Administrator'; // <-- FIX HERE
+            // FIX 2: Added Assistant Admin role definition
+            const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
+            
+            // --- TASK PRIORITY SORTING ---
+            const priorityTasks = tasks.map(task => {
+                const statusInfo = getStatusInfo(task);
+                const daysDiff = getDaysDifference(task.deadline);
+                const days = daysDiff.days || 9999; 
+
+                let sortValue;
+                if (statusInfo.sortValue === 3) { // Completed (Lowest Priority)
+                    sortValue = 10000;
+                } else if (statusInfo.sortValue === 1) { // Overdue (Highest Priority)
+                    sortValue = days; 
+                } else { // Pending (Due soonest - Medium Priority)
+                    sortValue = 5000 + days;
+                }
+                return { ...task, sortValue };
+            }).sort((a, b) => a.sortValue - b.sortValue);
+            // --- END TASK PRIORITY SORTING ---
+
+
+            // 1. Filter tasks based on user role (Admin sees all, Team sees only assigned)
+            const baseTasks = priorityTasks; // Everyone sees all tasks in the main board.
+            
+            // 2. Filter based on user's selected menu filter
+            let filteredTasks = baseTasks;
+
+            switch (STATE.taskFilter) {
+                case 'overdue':
+                    filteredTasks = baseTasks.filter(t => getStatusInfo(t).sortValue === 1);
+                    break;
+                case 'today':
+                    filteredTasks = baseTasks.filter(t => getDaysDifference(t.deadline).days === 0 && t.status !== 'Completed');
+                    break;
+                case 'tomorrow': 
+                    filteredTasks = baseTasks.filter(t => getDaysDifference(t.deadline).days === 1 && t.status !== 'Completed');
+                    break;
+                case 'thisWeek':
+                    filteredTasks = baseTasks.filter(t => isDueThisWeek(t.deadline) && t.status !== 'Completed');
+                    break;
+                case 'nextMonth':
+                    filteredTasks = baseTasks.filter(t => isDueNextMonth(t.deadline) && t.status !== 'Completed');
+                    break;
+                case 'completed':
+                    filteredTasks = baseTasks.filter(t => t.status === 'Completed');
+                    break;
+                case 'all':
+                default:
+                    // baseTasks is already sorted by priority
+                    break;
+            }
+
+            // Task Metrics for Header
+            const totalTasks = tasks.length;
+            const tasksOverdue = tasks.filter(t => isOverdue(t.deadline, t.status)).length;
+            const tasksCompleted = tasks.filter(t => t.status === 'Completed').length;
+            const tasksPending = totalTasks - tasksCompleted - tasksOverdue;
+
+            // Tasks assigned to the current user (for the quick view in the left column)
+            const userAssignedTasks = priorityTasks.filter(t => t.responsibleId === userId);
+            
+            // Permission Check for Admin Controls
+            const canManageTeam = isAdmin || isAssistantAdmin;
+
+
+            return `
+                <div class="fade-in">
+                    <header class="flex flex-col md:flex-row justify-between items-start md:items-center p-6 bg-white rounded-xl shadow-xl mb-8 no-print">
+                        <div>
+                            <h1 class="text-4xl font-extrabold text-gray-900">TaskFlow Dashboard</h1>
+                            <p class="text-lg text-indigo-600 mt-1">${userProfile?.designation || 'Team Member'} at <span class="font-mono bg-indigo-100 px-2 py-0.5 rounded-md text-sm">${currentCompanyId}</span></p>
+                            <p class="text-xs text-gray-500 mt-1">Logged in as: ${userProfile?.name || userEmail}</p>
+                        </div>
+                        <div class="mt-4 md:mt-0 flex space-x-3">
+                            <button onclick="updateState({ showProfileModal: true })" class="px-4 py-2 bg-indigo-500 text-white text-sm font-medium rounded-lg shadow hover:bg-indigo-600 transition duration-150">
+                                My Profile
+                            </button>
+                            
+                            ${canManageTeam ? `
+                            <div class="relative inline-block text-left">
+                                <button onclick="this.nextElementSibling.classList.toggle('hidden')" type="button" class="px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg shadow hover:bg-gray-700 transition duration-150">
+                                    Export Data
+                                </button>
+                                <div class="hidden origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-10">
+                                    <div class="py-1" role="menu" aria-orientation="vertical" aria-labelledby="options-menu">
+                                        <a href="#" onclick="handleExportCSV(); this.parentElement.parentElement.classList.toggle('hidden'); return false;" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Export to CSV</a>
+                                        <a href="#" onclick="handleExportPDF(); this.parentElement.parentElement.classList.toggle('hidden'); return false;" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Print/Export to PDF</a>
+                                    </div>
+                                </div>
+                            </div>
+                            ` : ''}
+                            
+                            <button onclick="handleLeaveCompany()" class="px-4 py-2 bg-yellow-500 text-white text-sm font-medium rounded-lg shadow hover:bg-yellow-600 transition duration-150">
+                                Leave Company
+                            </button>
+                            <button onclick="handleSignOut()" class="px-4 py-2 bg-red-600 text-white text-sm font-medium rounded-lg shadow hover:bg-red-700 transition duration-150">
+                                Sign Out
+                            </button>
+                        </div>
+                    </header>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 no-print">
+                        
+                        <div class="relative bg-white p-5 rounded-xl shadow-md border-l-4 border-indigo-500">
+                            <p class="text-sm font-medium text-gray-500">Total Tasks</p>
+                            <p class="text-3xl font-bold text-gray-900 mt-1">${totalTasks}</p>
+                            <span data-lucide="clipboard-list" class="w-6 h-6 text-indigo-500 absolute right-4 top-4 opacity-30"></span>
+                        </div>
+
+                        <div class="relative bg-white p-5 rounded-xl shadow-md border-l-4 border-red-500">
+                            <p class="text-sm font-medium text-gray-500">Overdue</p>
+                            <p class="text-3xl font-bold text-red-600 mt-1">${tasksOverdue}</p>
+                            <span data-lucide="alert-triangle" class="w-6 h-6 text-red-500 absolute right-4 top-4 opacity-30"></span>
+                        </div>
+
+                        <div class="relative bg-white p-5 rounded-xl shadow-md border-l-4 border-orange-500">
+                            <p class="text-sm font-medium text-gray-500">Pending</p>
+                            <p class="text-3xl font-bold text-orange-600 mt-1">${tasksPending}</p>
+                            <span data-lucide="clock" class="w-6 h-6 text-orange-500 absolute right-4 top-4 opacity-30"></span>
+                        </div>
+
+                        <div class="relative bg-white p-5 rounded-xl shadow-md border-l-4 border-emerald-500">
+                            <p class="text-sm font-medium text-gray-500">Completed</p>
+                            <p class="text-3xl font-bold text-emerald-600 mt-1">${tasksCompleted}</p>
+                            <span data-lucide="check-circle" class="w-6 h-6 text-emerald-500 absolute right-4 top-4 opacity-30"></span>
+                        </div>
+                    </div>
+
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        
+                        <div class="lg:col-span-1 space-y-8 no-print">
+                            ${canManageTeam ? `
+                            <div class="bg-white p-6 rounded-xl shadow-xl">
+                                <h2 class="text-2xl font-bold text-gray-800 flex items-center border-b pb-3 mb-4">
+                                    <span data-lucide="users-2" class="w-6 h-6 mr-2 text-blue-500"></span>Team Management
+                                </h2>
+                                ${renderTeamList()}
+                                
+                                <h3 class="text-lg font-semibold text-gray-700 mt-6 mb-3">Add New Member</h3>
+                                <form id="add-member-form" class="space-y-3">
+                                    <div>
+                                        <input type="email" name="email" value="${STATE.newTeamMemberForm.email}" required placeholder="Member Email (Login ID)"
+                                            oninput="updateState({ newTeamMemberForm: { email: this.value } })"
+                                            class="block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                    </div>
+                                    <div>
+                                        <select name="designation" required onchange="updateState({ newTeamMemberForm: { designation: this.value } })" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500 text-sm">
+                                            <option value="">Select Designation</option>
+                                            <option value="Team Member">Team Member</option>
+                                            ${isAdmin ? '<option value="HR Manager/Administrator">HR Manager/Administrator</option>' : ''} <option value="Assistant Administrator">Assistant Administrator</option>
+                                        </select>
+                                    </div>
+                                    <button type="submit" class="w-full py-2 bg-blue-600 text-white text-sm font-medium rounded-lg shadow hover:bg-blue-700 transition duration-150" ${STATE.loading ? 'disabled' : ''}>
+                                        ${STATE.loading ? '...' : 'Add Team Member'}
+                                    </button>
+                                </form>
+                            </div>
+                            ` : ''}
+                            
+                            <div class="bg-white p-6 rounded-xl shadow-xl">
+                                <h2 class="text-2xl font-bold text-gray-800 flex items-center border-b pb-3 mb-4">
+                                    <span data-lucide="user-check" class="w-6 h-6 mr-2 text-green-500"></span>My Assigned Tasks (Quick View)
+                                </h2>
+                                ${renderUserTaskList(userAssignedTasks)}
+                            </div>
+                        </div>
+
+
+                        <div class="lg:col-span-2 space-y-8">
+                            
+                            <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-md border no-print">
+                                <h3 class="text-lg font-semibold text-gray-700">Filter By:</h3>
+                                <select onchange="updateState({ taskFilter: this.value })" 
+                                        class="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                                    <option value="all" ${STATE.taskFilter === 'all' ? 'selected' : ''}>All Tasks</option>
+                                    <option value="overdue" ${STATE.taskFilter === 'overdue' ? 'selected' : ''}>🚨 Overdue</option>
+                                    <option value="today" ${STATE.taskFilter === 'today' ? 'selected' : ''}>⏰ Due Today</option>
+                                    <option value="tomorrow" ${STATE.taskFilter === 'tomorrow' ? 'selected' : ''}>➡️ Due Tomorrow</option>
+                                    <option value="thisWeek" ${STATE.taskFilter === 'thisWeek' ? 'selected' : ''}>🗓️ Due This Week</option>
+                                    <option value="nextMonth" ${STATE.taskFilter === 'nextMonth' ? 'selected' : ''}>🔜 Due Next Month</option>
+                                    <option value="completed" ${STATE.taskFilter === 'completed' ? 'selected' : ''}>✅ Completed</option>
+                                </select>
+                            </div>
+
+                            <div class="bg-white p-6 rounded-xl shadow-xl">
+                                <h2 class="text-2xl font-bold text-gray-800 flex items-center border-b pb-3 mb-4">
+                                    <span data-lucide="clipboard-check" class="w-6 h-6 mr-2 text-indigo-500"></span>${isAdmin ? 'Team Task Priority Board' : 'All Team Tasks'}
+                                </h2>
+                                ${renderTaskList(filteredTasks, false)}
+                            </div>
+
+                            ${canManageTeam ? `
+                            <div class="bg-white p-6 rounded-xl shadow-xl no-print">
+                                <h2 class="text-2xl font-bold text-gray-800 flex items-center border-b pb-3 mb-4">
+                                    <span data-lucide="list-plus" class="w-6 h-6 mr-2 text-green-500"></span>Assign New Task
+                                </h2>
+                                <form id="new-task-form" class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Task Title</label>
+                                        <input type="text" name="title" value="${STATE.newTaskForm.title}" required
+                                            oninput="updateState({ newTaskForm: { title: this.value } })"
+                                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-green-500 focus:border-green-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700">Description (Optional)</label>
+                                        <textarea name="description"
+                                            oninput="updateState({ newTaskForm: { description: this.value } })"
+                                            class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-green-500 focus:border-green-500">${STATE.newTaskForm.description}</textarea>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700">Deadline</label>
+                                            <input type="date" name="deadline" value="${STATE.newTaskForm.deadline}" required
+                                                onchange="updateState({ newTaskForm: { deadline: this.value } })"
+                                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-green-500 focus:border-green-500">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700">Responsible User</label>
+                                            <select name="responsibleId" required
+                                                onchange="updateState({ newTaskForm: { responsibleId: this.value } })"
+                                                class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-green-500 focus:border-green-500">
+                                                <option value="" disabled>Select Team Member</option>
+                                                ${teamMembers.map(m => `
+                                                    <option value="${m.id}" ${STATE.newTaskForm.responsibleId === m.id ? 'selected' : ''}>
+                                                        ${getMemberInfo(m.id, 'name')} (${getMemberInfo(m.id, 'designation')})
+                                                    </option>
+                                                `).join('')}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-lg text-base font-medium text-white bg-green-600 hover:bg-green-700 transition duration-150 ease-in-out" ${STATE.loading || teamMembers.length === 0 ? 'disabled' : ''}>
+                                        ${teamMembers.length === 0 ? 'Add Team Members First' : (STATE.loading ? '...' : 'Create Task')}
+                                    </button>
+                                </form>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        };
+        
+        // Renders the main task board (horizontal cards)
+        const renderTaskList = (list, isCompact = false) => {
+            const isAdmin = userProfile?.designation === 'HR Manager/Administrator'; // <-- FIX HERE
             const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
 
             if (list.length === 0) {

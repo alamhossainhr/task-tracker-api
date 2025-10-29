@@ -56,6 +56,17 @@
             min-width: 250px;
         }
 
+        /* Print styles for PDF export */
+        @media print {
+            body { background: white; }
+            .no-print { display: none !important; }
+            #app { padding: 0 !important; }
+            .compact-task-card { border: 1px solid #ccc !important; page-break-inside: avoid; }
+            .compact-section { border-right: 1px solid #ccc !important; }
+            .print-table { width: 100%; border-collapse: collapse; }
+            .print-table th, .print-table td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        }
+
     </style>
 </head>
 <body class="min-h-screen antialiased">
@@ -68,7 +79,7 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateEmail, updatePassword, reauthenticateWithCredential, EmailAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, query, where, addDoc, serverTimestamp, updateDoc, deleteDoc, getDoc, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, where, addDoc, serverTimestamp, updateDoc, deleteDoc, getDoc, runTransaction, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Set Firestore debug level (recommended for development)
@@ -106,8 +117,7 @@
             authMode: 'login', // 'login', 'register'
             message: null,
             loading: false,
-            newCompanyId: '',
-            joinCompanyId: '',
+            // Removed newCompanyId and joinCompanyId from state to fix blinking
             newTaskForm: {
                 title: '', description: '', deadline: '', responsibleId: '', assignerId: '',
             },
@@ -122,6 +132,12 @@
             },
             // NEW STATE FOR FILTERING
             taskFilter: 'all', // 'all', 'overdue', 'today', 'tomorrow', 'thisWeek', 'nextMonth', 'completed'
+            // NEW STATE FOR TASK EDITING
+            showEditModal: false,
+            editingTask: null, // Holds the task object being edited
+            editTaskForm: {
+                id: null, title: '', description: '', deadline: '', responsibleId: '',
+            }
         };
 
         const appContainer = document.getElementById('app');
@@ -132,7 +148,8 @@
         const formatDate = (dateString) => {
             if (!dateString) return 'N/A';
             const date = new Date(dateString);
-            return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+            // Format to something clean like Oct 29, 2025
+            return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); 
         };
 
         /** Calculates days remaining or days overdue */
@@ -216,6 +233,9 @@
             if (field === 'name') {
                 // Check public team name first, then userProfile name, then email username
                 return member?.name || userProfile?.name || getMemberInfo(uid, 'email');
+            }
+            if (field === 'phone') {
+                return member?.phone || 'N/A';
             }
             return 'N/A';
         };
@@ -330,8 +350,34 @@
                 console.error("Error listening to team:", error);
             });
         };
+
+        // --- WHATSAPP / NOTIFICATION HANDLER (Backend Design) ---
+        const sendWhatsappNotification = (task, recipientPhone, type) => {
+            // NOTE: Direct WhatsApp API integration requires a server/backend.
+            // This function simulates the API call and logs the data required to send the message.
+            if (!recipientPhone || recipientPhone === 'N/A') {
+                console.warn(`[WHATSAPP SKIPPED] No phone number for user: ${getMemberInfo(task.responsibleId, 'name')}`);
+                return;
+            }
+
+            const messageMap = {
+                'created': `📢 NEW TASK ASSIGNED:\n*${task.title}* is due on ${formatDate(task.deadline)}. Check your TaskFlow Dashboard!`,
+                'updated': `📝 TASK UPDATED: *${task.title}* has been modified. New deadline: ${formatDate(task.deadline)}.`,
+                'status': `✅ TASK STATUS: *${task.title}* is now ${task.status}.`,
+                'reminder': `⚠️ DUE REMINDER: *${task.title}* is due soon! Deadline: ${formatDate(task.deadline)}.`,
+            };
+
+            const message = messageMap[type] || messageMap['created'];
+
+            // --- PRODUCTION INTEGRATION POINT ---
+            console.log(`--- [WHATSAPP API CALL SIMULATED] ---`);
+            console.log(`TO: ${recipientPhone}`);
+            console.log(`TYPE: ${type}`);
+            console.log(`MESSAGE: ${message}`);
+            // --- END INTEGRATION POINT ---
+        };
         
-        // --- PROFILE HANDLERS ---
+        // --- PROFILE HANDLERS (Unchanged logic) ---
         
         const handleProfileUpdate = async () => {
             const { name, phone } = STATE.userProfileForm;
@@ -413,7 +459,7 @@
             }
         };
 
-        // --- AUTH HANDLERS ---
+        // --- AUTH HANDLERS (Unchanged logic) ---
 
         const handleAuthAction = async (e) => {
             e.preventDefault();
@@ -450,7 +496,8 @@
         const handleCreateCompany = async (e) => {
             e.preventDefault();
             updateState({ loading: true, message: null });
-            const companyId = STATE.newCompanyId.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+            // Read value directly from form
+            const companyId = e.target.newCompanyId.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
 
             if (!companyId) {
                 updateState({ message: 'Company ID cannot be empty.', loading: false });
@@ -494,7 +541,7 @@
                         phone: ''
                     });
                 });
-                updateState({ newCompanyId: '', loading: false, message: `Company '${companyId}' created successfully!` });
+                updateState({ loading: false, message: `Company '${companyId}' created successfully!` });
             } catch (error) {
                 console.error("Company Creation Error:", error);
                 updateState({ message: error.message, loading: false });
@@ -504,7 +551,8 @@
         const handleJoinCompany = async (e) => {
             e.preventDefault();
             updateState({ loading: true, message: null });
-            const companyId = STATE.joinCompanyId.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+            // Read value directly from form
+            const companyId = e.target.joinCompanyId.value.trim().toLowerCase().replace(/[^a-z0-9-]/g, ''); 
 
             if (!companyId) {
                 updateState({ message: 'Company ID cannot be empty.', loading: false });
@@ -547,7 +595,7 @@
                     phone: teamDoc.data().phone || ''
                 }, { merge: true });
 
-                updateState({ joinCompanyId: '', loading: false, message: `Successfully joined company '${companyId}'.` });
+                updateState({ loading: false, message: `Successfully joined company '${companyId}'.` });
 
             } catch (error) {
                 console.error("Company Join Error:", error);
@@ -556,6 +604,74 @@
         };
 
         // --- TASK HANDLERS ---
+        
+        // NEW: Handles launching the edit modal
+        const handleEditTask = (taskId) => {
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+
+            const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
+            const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
+            
+            // FIX 1: Admin and Assistant Admin can edit tasks
+            if (!isAdmin && !isAssistantAdmin) {
+                updateState({ message: 'Permission Denied: Only Administrators can edit tasks.', loading: false });
+                return;
+            }
+            
+            // Clear message/loading before opening modal
+            updateState({ message: null, loading: false });
+
+            updateState({
+                showEditModal: true,
+                editingTask: task,
+                editTaskForm: {
+                    id: task.id,
+                    title: task.title,
+                    description: task.description,
+                    // Ensure date input is correctly formatted (YYYY-MM-DD)
+                    deadline: task.deadline ? new Date(task.deadline).toISOString().substring(0, 10) : '',
+                    responsibleId: task.responsibleId,
+                }
+            });
+        };
+
+        // NEW: Handles saving the edited task
+        const handleSaveEditTask = async (e) => {
+            e.preventDefault();
+            const form = STATE.editTaskForm;
+            updateState({ loading: true, message: null });
+
+            if (!form.title || !form.deadline || !form.responsibleId || form.responsibleId.length < 5) { 
+                updateState({ message: 'Title, Responsible User ID, and Deadline are required.', loading: false });
+                return;
+            }
+
+            try {
+                const taskDocRef = doc(getTasksCollectionRef(currentCompanyId), form.id);
+                await updateDoc(taskDocRef, {
+                    title: form.title,
+                    description: form.description,
+                    responsibleId: form.responsibleId,
+                    deadline: form.deadline,
+                });
+                
+                // Get recipient phone number for notification
+                const recipient = teamMembers.find(m => m.id === form.responsibleId);
+                sendWhatsappNotification(form, recipient ? recipient.phone : null, 'updated');
+
+                updateState({
+                    loading: false,
+                    message: 'Task updated successfully!',
+                    showEditModal: false,
+                    editingTask: null,
+                });
+            } catch (error) {
+                console.error("Task Update Error:", error);
+                updateState({ message: 'Failed to update task.', loading: false });
+            }
+        };
+
 
         const handleCreateTask = async (e) => {
             e.preventDefault();
@@ -568,7 +684,7 @@
             }
 
             try {
-                await addDoc(getTasksCollectionRef(currentCompanyId), {
+                const newTaskRef = await addDoc(getTasksCollectionRef(currentCompanyId), {
                     title: form.title,
                     description: form.description,
                     responsibleId: form.responsibleId,
@@ -577,6 +693,10 @@
                     status: 'Pending',
                     createdAt: serverTimestamp(),
                 });
+                
+                // Get recipient phone number for notification
+                const recipient = teamMembers.find(m => m.id === form.responsibleId);
+                sendWhatsappNotification({ id: newTaskRef.id, ...form }, recipient ? recipient.phone : null, 'created');
 
                 updateState({
                     loading: false,
@@ -616,6 +736,11 @@
 
             try {
                 await updateDoc(taskDocRef, { status: newStatus });
+                
+                // Send notification on status change
+                const recipient = teamMembers.find(m => m.id === task.responsibleId);
+                sendWhatsappNotification(task, recipient ? recipient.phone : null, 'status');
+
                 updateState({ loading: false, message: `Task status updated to ${newStatus}.` });
             } catch (error) {
                 console.error("Task Update Error:", error);
@@ -624,7 +749,7 @@
         };
 
         const handleDeleteTask = async (taskId) => {
-            // FIX 2: Deletion is restricted to the main HR Manager / Administrator only.
+            // Deletion is restricted to the main Team Leader / Administrator only.
             const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
             if (!isAdmin) {
                 alert("Permission Denied: Only the main HR Manager / Administrator can delete tasks.");
@@ -643,7 +768,90 @@
             }
         };
 
-        // --- TEAM HANDLERS ---
+        // --- EXPORT HANDLERS (Unchanged logic) ---
+        
+        const handleExportCSV = () => {
+            const headers = ['ID', 'Title', 'Description', 'Responsible', 'Deadline', 'Status', 'Assigned By', 'Date Assigned'];
+            
+            const rows = tasks.map(t => {
+                const responsibleName = getMemberInfo(t.responsibleId, 'name');
+                const assignerName = getMemberInfo(t.assignerId, 'name');
+                const dateAssigned = t.createdAt ? formatDate(t.createdAt.toDate()) : 'N/A';
+
+                return [
+                    t.id,
+                    `"${t.title.replace(/"/g, '""')}"`,
+                    `"${t.description ? t.description.replace(/"/g, '""') : ''}"`,
+                    responsibleName,
+                    formatDate(t.deadline),
+                    t.status,
+                    assignerName,
+                    dateAssigned
+                ].join(',');
+            });
+
+            const csvContent = [headers.join(','), ...rows].join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = `TaskFlow_Export_${currentCompanyId}_${new Date().toISOString().substring(0, 10)}.csv`;
+            link.click();
+
+            updateState({ message: 'CSV file downloaded successfully!', loading: false });
+        };
+
+        const handleExportPDF = () => {
+            const printContent = `
+                <div class="p-8">
+                    <h1 class="text-3xl font-bold mb-4">TaskFlow Report: ${currentCompanyId}</h1>
+                    <p class="text-sm text-gray-600 mb-6">Generated by ${userProfile.name} on ${formatDate(new Date())}</p>
+                    <table class="print-table">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Responsible</th>
+                                <th>Deadline</th>
+                                <th>Status</th>
+                                <th>Days Due</th>
+                                <th>Assigned By</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${tasks.map(t => {
+                                const responsibleName = getMemberInfo(t.responsibleId, 'name');
+                                const assignerName = getMemberInfo(t.assignerId, 'name');
+                                const daysDiff = getDaysDifference(t.deadline);
+                                const statusInfo = getStatusInfo(t);
+
+                                return `
+                                    <tr>
+                                        <td>${t.title}</td>
+                                        <td>${responsibleName}</td>
+                                        <td>${formatDate(t.deadline)}</td>
+                                        <td>${statusInfo.label}</td>
+                                        <td class="${daysDiff.class.includes('red') ? 'font-bold text-red-600' : ''}">${daysDiff.label}</td>
+                                        <td>${assignerName}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            const originalContent = document.body.innerHTML;
+            document.body.innerHTML = printContent;
+            
+            window.print();
+            
+            setTimeout(() => {
+                document.body.innerHTML = originalContent;
+                render();
+                updateState({ message: 'PDF generated. Check your downloads.', loading: false });
+            }, 500); 
+        };
+
+        // --- TEAM HANDLERS (Unchanged logic) ---
 
         const handleAddTeamMember = async (e) => {
             e.preventDefault();
@@ -686,7 +894,7 @@
         };
 
         const handleRemoveTeamMember = async (memberId) => {
-            // FIX 2: Removal is restricted to the main HR Manager / Administrator only.
+            // Removal is restricted to the main Team Leader / Administrator only.
             const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
             if (!isAdmin) {
                 alert("Permission Denied: Only the main HR Manager / Administrator can remove team members.");
@@ -730,19 +938,20 @@
         // --- STATE AND RENDERING ---
 
         const updateState = (newState) => {
+            // isFormChange is used to determine if we should SKIP rendering for smooth typing.
             const isFormChange = newState.hasOwnProperty('newTaskForm') || newState.hasOwnProperty('newTeamMemberForm') || 
-                                 newState.hasOwnProperty('newCompanyId') || newState.hasOwnProperty('joinCompanyId') || 
-                                 newState.hasOwnProperty('userProfileForm');
+                                 newState.hasOwnProperty('userProfileForm') || newState.hasOwnProperty('editTaskForm');
             
             Object.keys(newState).forEach(key => {
-                if (key === 'newTaskForm' || key === 'newTeamMemberForm' || key === 'userProfileForm') {
+                if (key === 'newTaskForm' || key === 'newTeamMemberForm' || key === 'userProfileForm' || key === 'editTaskForm') {
                     STATE[key] = { ...STATE[key], ...newState[key] };
                 } else {
                     STATE[key] = newState[key];
                 }
             });
             
-            if (!isFormChange || newState.message || newState.loading || STATE.view !== 'dashboard' || newState.showProfileModal !== undefined || newState.taskFilter !== undefined) {
+            // Only render if it's NOT a form input change OR if there is a message/loading status change OR if the view/modal is changing.
+            if (!isFormChange || newState.message || newState.loading || STATE.view !== 'dashboard' || newState.showProfileModal !== undefined || newState.taskFilter !== undefined || newState.showEditModal !== undefined) {
                  render();
             }
         };
@@ -777,9 +986,12 @@
                     break;
             }
             
-            // Render Modal if requested
+            // Render Modals if requested
             if (STATE.showProfileModal) {
                 html += renderProfileModal();
+            }
+            if (STATE.showEditModal) {
+                html += renderEditTaskModal();
             }
 
             appContainer.innerHTML = html;
@@ -789,8 +1001,66 @@
 
         // --- RENDER FUNCTIONS ---
         
+        const renderEditTaskModal = () => {
+            const task = STATE.editingTask;
+            if (!task) return '';
+            
+            // Get task deadline in YYYY-MM-DD format for input default value
+            const taskDeadline = STATE.editTaskForm.deadline;
+
+            return `
+                <div class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 fade-in no-print" onclick="updateState({ showEditModal: false, editingTask: null, message: null })">
+                    <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg mx-4" onclick="event.stopPropagation()">
+                        <div class="flex justify-between items-center border-b pb-3 mb-4">
+                            <h2 class="text-2xl font-bold text-gray-800 flex items-center"><span data-lucide="edit" class="w-6 h-6 mr-2 text-green-600"></span>Edit Task: ${task.title}</h2>
+                            <button onclick="updateState({ showEditModal: false, editingTask: null, message: null })" class="text-gray-400 hover:text-gray-600">
+                                <span data-lucide="x" class="w-6 h-6"></span>
+                            </button>
+                        </div>
+                        
+                        ${STATE.message ? `<div class="p-3 mb-4 text-sm rounded-lg ${STATE.message.includes('success') ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}">${STATE.message}</div>` : ''}
+
+                        <form id="edit-task-form" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Task Title</label>
+                                <input type="text" value="${STATE.editTaskForm.title}" required
+                                    oninput="updateState({ editTaskForm: { title: this.value } })"
+                                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700">Description</label>
+                                <textarea oninput="updateState({ editTaskForm: { description: this.value } })"
+                                    class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">${STATE.editTaskForm.description}</textarea>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Deadline</label>
+                                    <input type="date" value="${taskDeadline}" required
+                                        onchange="updateState({ editTaskForm: { deadline: this.value } })"
+                                        class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700">Responsible User</label>
+                                    <select required onchange="updateState({ editTaskForm: { responsibleId: this.value } })" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm">
+                                        ${teamMembers.map(m => `
+                                            <option value="${m.id}" ${STATE.editTaskForm.responsibleId === m.id ? 'selected' : ''}>
+                                                ${getMemberInfo(m.id, 'name')} (${getMemberInfo(m.id, 'designation')})
+                                            </option>
+                                        `).join('')}
+                                    </select>
+                                </div>
+                            </div>
+                            <button type="submit" class="w-full py-3 bg-indigo-600 text-white text-base font-medium rounded-lg shadow hover:bg-indigo-700 transition" ${STATE.loading ? 'disabled' : ''}>
+                                Save Changes
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            `;
+        };
+        
         const renderProfileModal = () => `
-            <div class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 fade-in" onclick="updateState({ showProfileModal: false })">
+            <div class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 fade-in no-print" onclick="updateState({ showProfileModal: false })">
                 <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg mx-4" onclick="event.stopPropagation()">
                     <div class="flex justify-between items-center border-b pb-3 mb-4">
                         <h2 class="text-2xl font-bold text-gray-800 flex items-center"><span data-lucide="user-cog" class="w-6 h-6 mr-2 text-indigo-600"></span>My Profile Settings</h2>
@@ -807,6 +1077,7 @@
                             <p class="font-medium text-lg text-indigo-600">${userEmail}</p>
                             <p class="text-sm text-gray-500">${userProfile?.designation || 'Team Member'}</p>
                             <p class="text-sm text-gray-700 mt-1">Name: ${userProfile?.name || 'Not Set'}</p>
+                            <p class="text-sm text-gray-700">Phone: ${userProfile?.phone || 'Not Set'}</p>
                         </div>
                         
                         <!-- Section 1: Name and Phone -->
@@ -818,7 +1089,7 @@
                                     <input type="text" value="${STATE.userProfileForm.name}" oninput="updateState({ userProfileForm: { name: this.value } })" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg">
                                 </div>
                                 <div>
-                                    <label class="block text-sm font-medium text-gray-700">Phone Number (Optional)</label>
+                                    <label class="block text-sm font-medium text-gray-700">Phone Number (Required for WhatsApp)</label>
                                     <input type="text" value="${STATE.userProfileForm.phone}" oninput="updateState({ userProfileForm: { phone: this.value } })" class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg">
                                 </div>
                                 <button onclick="handleProfileUpdate()" class="w-full py-2 bg-green-600 text-white text-sm font-medium rounded-lg shadow hover:bg-green-700 transition">Save Details</button>
@@ -907,8 +1178,7 @@
                         <form id="create-company-form" class="space-y-4">
                             <div>
                                 <label for="newCompanyId" class="block text-sm font-medium text-gray-700">Choose a unique Company ID (e.g., awesome-hr-corp)</label>
-                                <input type="text" id="newCompanyId" value="${STATE.newCompanyId}" required
-                                    oninput="updateState({ newCompanyId: this.value })"
+                                <input type="text" id="newCompanyId" name="newCompanyId" required
                                     class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
                             </div>
                             <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-lg text-sm font-medium text-white bg-green-600 hover:bg-green-700 transition duration-150 ease-in-out" ${STATE.loading ? 'disabled' : ''}>
@@ -926,8 +1196,7 @@
                         <form id="join-company-form" class="space-y-4">
                             <div>
                                 <label for="joinCompanyId" class="block text-sm font-medium text-gray-700">Company ID</label>
-                                <input type="text" id="joinCompanyId" value="${STATE.joinCompanyId}" required
-                                    oninput="updateState({ joinCompanyId: this.value })"
+                                <input type="text" id="joinCompanyId" name="joinCompanyId" required
                                     class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
                             </div>
                             <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-lg text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 transition duration-150 ease-in-out" ${STATE.loading ? 'disabled' : ''}>
@@ -1015,7 +1284,7 @@
 
             return `
                 <div class="fade-in">
-                    <header class="flex flex-col md:flex-row justify-between items-start md:items-center p-6 bg-white rounded-xl shadow-xl mb-8">
+                    <header class="flex flex-col md:flex-row justify-between items-start md:items-center p-6 bg-white rounded-xl shadow-xl mb-8 no-print">
                         <div>
                             <h1 class="text-4xl font-extrabold text-gray-900">TaskFlow Dashboard</h1>
                             <p class="text-lg text-indigo-600 mt-1">${userProfile?.designation || 'Team Member'} at <span class="font-mono bg-indigo-100 px-2 py-0.5 rounded-md text-sm">${currentCompanyId}</span></p>
@@ -1025,6 +1294,19 @@
                             <button onclick="updateState({ showProfileModal: true })" class="px-4 py-2 bg-indigo-500 text-white text-sm font-medium rounded-lg shadow hover:bg-indigo-600 transition duration-150">
                                 My Profile
                             </button>
+                            ${isAdmin ? `
+                            <div class="relative inline-block text-left">
+                                <button onclick="this.nextElementSibling.classList.toggle('hidden')" type="button" class="px-4 py-2 bg-gray-600 text-white text-sm font-medium rounded-lg shadow hover:bg-gray-700 transition duration-150">
+                                    Export Data
+                                </button>
+                                <div class="hidden origin-top-right absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white ring-1 ring-black ring-opacity-5 focus:outline-none z-10">
+                                    <div class="py-1" role="menu" aria-orientation="vertical" aria-labelledby="options-menu">
+                                        <a href="#" onclick="handleExportCSV(); return false;" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Export to CSV</a>
+                                        <a href="#" onclick="handleExportPDF(); return false;" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Print/Export to PDF</a>
+                                    </div>
+                                </div>
+                            </div>
+                            ` : ''}
                             <button onclick="handleLeaveCompany()" class="px-4 py-2 bg-yellow-500 text-white text-sm font-medium rounded-lg shadow hover:bg-yellow-600 transition duration-150">
                                 Leave Company
                             </button>
@@ -1035,7 +1317,7 @@
                     </header>
                     
                     <!-- Metric Cards (4 in a line) -->
-                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 no-print">
                         
                         <div class="relative bg-white p-5 rounded-xl shadow-md border-l-4 border-indigo-500">
                             <p class="text-sm font-medium text-gray-500">Total Tasks</p>
@@ -1101,7 +1383,7 @@
                             <!-- User Assigned Tasks -->
                             <div class="bg-white p-6 rounded-xl shadow-xl">
                                 <h2 class="text-2xl font-bold text-gray-800 flex items-center border-b pb-3 mb-4">
-                                    <span data-lucide="user-check" class="w-6 h-6 mr-2 text-green-500"></span>My Assigned Tasks
+                                    <span data-lucide="user-check" class="w-6 h-6 mr-2 text-green-500"></span>My Assigned Tasks (Quick View)
                                 </h2>
                                 ${renderUserTaskList(userAssignedTasks)}
                             </div>
@@ -1112,7 +1394,7 @@
                         <div class="lg:col-span-2 space-y-8">
                             
                             <!-- Filter Menu -->
-                            <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-md border">
+                            <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-md border no-print">
                                 <h3 class="text-lg font-semibold text-gray-700">Filter By:</h3>
                                 <select onchange="updateState({ taskFilter: this.value })" 
                                         class="px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
@@ -1189,6 +1471,8 @@
         // Renders the main task board (horizontal cards)
         const renderTaskList = (list, isCompact = false) => {
             const isAdmin = userProfile?.designation === 'HR Manager / Administrator';
+            const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
+
             if (list.length === 0) {
                 return `<p class="text-gray-500 italic p-4 bg-gray-50 rounded-lg">No tasks found matching the current filter.</p>`;
             }
@@ -1202,11 +1486,11 @@
                     const responsibleName = getMemberInfo(task.responsibleId, 'name');
                     const assignerName = getMemberInfo(task.assignerId, 'name');
                     const isResponsible = task.responsibleId === userId;
-                    const isAssistantAdmin = userProfile?.designation === 'Assistant Administrator';
 
                     // Determine if the action button should be enabled/visible
                     const canToggleStatus = isResponsible || isAdmin || isAssistantAdmin;
                     const canDelete = isAdmin; // Only the main Admin can delete.
+                    const canEdit = isAdmin || isAssistantAdmin; // Only Admins/Assistant Admins can edit.
 
                     return `
                         <div class="compact-task-card bg-white border border-gray-200 border-l-4 ${info.class.includes('overdue') ? 'border-red-500' : info.class.includes('completed') ? 'border-emerald-500' : 'border-indigo-500'} fade-in">
@@ -1242,13 +1526,20 @@
                                 </button>
                                 ` : `<button disabled class="py-1 px-3 text-xs font-medium rounded-lg bg-gray-200 text-gray-500 cursor-not-allowed">View Only</button>`}
                                 
-                                <!-- Delete Button: Only visible to Admin -->
-                                ${canDelete ? `
-                                <button onclick="handleDeleteTask('${task.id}')"
-                                    class="py-1 px-3 bg-red-100 hover:bg-red-200 text-red-600 text-xs font-medium rounded-lg transition duration-150" title="Delete Task">
-                                    Delete
-                                </button>
-                                ` : ''}
+                                <div class="flex space-x-2">
+                                    ${canEdit ? `
+                                    <button onclick="handleEditTask('${task.id}')"
+                                        class="py-1 px-2 flex-1 bg-blue-100 hover:bg-blue-200 text-blue-600 text-xs font-medium rounded-lg transition duration-150" title="Edit Task">
+                                        <span data-lucide="edit-3" class="w-4 h-4 mx-auto"></span>
+                                    </button>
+                                    ` : ''}
+                                    ${canDelete ? `
+                                    <button onclick="handleDeleteTask('${task.id}')"
+                                        class="py-1 px-2 flex-1 bg-red-100 hover:bg-red-200 text-red-600 text-xs font-medium rounded-lg transition duration-150" title="Delete Task">
+                                        <span data-lucide="trash-2" class="w-4 h-4 mx-auto"></span>
+                                    </button>
+                                    ` : ''}
+                                </div>
                             </div>
                         </div>
                     `;
@@ -1371,6 +1662,12 @@
             if (passwordForm) {
                 passwordForm.onsubmit = handlePasswordUpdate;
             }
+            
+            // Attach event listener for task edit form
+            const editTaskForm = document.getElementById('edit-task-form');
+            if (editTaskForm) {
+                editTaskForm.onsubmit = handleSaveEditTask;
+            }
         };
 
         // --- GLOBAL EXPORTS (Required for inline HTML event handlers) ---
@@ -1383,6 +1680,10 @@
         window.handleProfileUpdate = handleProfileUpdate;
         window.handleEmailUpdate = handleEmailUpdate;
         window.handlePasswordUpdate = handlePasswordUpdate;
+        window.handleEditTask = handleEditTask; // Exported new edit function
+        window.handleSaveEditTask = handleSaveEditTask; // Exported new save edit function
+        window.handleExportCSV = handleExportCSV;
+        window.handleExportPDF = handleExportPDF;
 
 
         // --- START APPLICATION ---
